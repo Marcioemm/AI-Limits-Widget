@@ -71,6 +71,59 @@ def load_config() -> dict[str, Any]:
     return config
 
 
+def claude_account_email(config_dir: pathlib.Path, is_default: bool) -> str | None:
+    """Lê apenas o e-mail da conta no .claude.json; nunca toca em tokens."""
+    state_file = pathlib.Path.home() / ".claude.json" if is_default else config_dir / ".claude.json"
+    try:
+        account = json.loads(state_file.read_text(encoding="utf-8")).get("oauthAccount") or {}
+    except (OSError, ValueError, AttributeError):
+        return None
+    email = account.get("emailAddress") if isinstance(account, dict) else None
+    return email if isinstance(email, str) and email.strip() else None
+
+
+def discover_claude_profiles(executable: str | None) -> list[dict[str, Any]]:
+    """Encontra contas do Claude Code em ~/.claude, ~/.claude-* e CLAUDE_CONFIG_DIR."""
+    home = pathlib.Path.home()
+    default_dir = home / ".claude"
+    candidates = [default_dir]
+    env_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    if env_dir:
+        candidates.append(pathlib.Path(env_dir))
+    try:
+        candidates.extend(sorted(path for path in home.glob(".claude-*") if path.is_dir()))
+    except OSError:
+        pass
+
+    profiles: list[dict[str, Any]] = []
+    seen_dirs: set[str] = set()
+    seen_accounts: set[str] = set()
+    for directory in candidates:
+        key = os.path.normcase(str(directory.resolve()))
+        if key in seen_dirs or not (directory / ".credentials.json").is_file():
+            continue
+        seen_dirs.add(key)
+        is_default = key == os.path.normcase(str(default_dir.resolve()))
+        email = claude_account_email(directory, is_default)
+        if email:
+            if email.lower() in seen_accounts:
+                continue
+            seen_accounts.add(email.lower())
+        name = directory.name.lstrip(".").removeprefix("claude-") or "extra"
+        suffix = "default" if is_default else "".join(ch if ch.isalnum() else "-" for ch in name)
+        label = email.split("@")[0] if email else ("Padrão" if is_default else directory.name.lstrip("."))
+        profiles.append(
+            {
+                "id": f"claude-{suffix}",
+                "provider": "claude",
+                "label": label[:40],
+                "executable": executable,
+                "configDir": None if is_default else str(directory),
+            }
+        )
+    return profiles
+
+
 def load_profiles() -> list[dict[str, Any]]:
     """Carrega perfis configurados e converte a configuração antiga quando necessário."""
     config = load_config()
@@ -96,6 +149,11 @@ def load_profiles() -> list[dict[str, Any]]:
 
     executables = config["executables"]
     for provider in config["providers"]:
+        if provider == "claude":
+            discovered = discover_claude_profiles(executables.get(provider))
+            if discovered:
+                profiles.extend(discovered)
+                continue
         profiles.append(
             {
                 "id": f"{provider}-default",
