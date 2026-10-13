@@ -69,6 +69,25 @@ na respectiva seção.
 O widget pode ser arrastado pela barra superior, lembra sua posição e possui
 botões para atualizar, fixar, recolher e encerrar.
 
+## Atualização
+
+Quem instalou pelo Git atualiza sem perder posição, perfis ou preferências:
+
+```powershell
+.\scripts\update.ps1
+```
+
+O atualizador interrompe se houver mudanças locais, usa apenas atualização
+rápida (`git pull --ff-only`) e nunca altera
+`%LOCALAPPDATA%\LimitesIA`. Para atualizar e reabrir o widget:
+
+```powershell
+.\scripts\update.ps1 -Restart
+```
+
+Quem usar uma futura versão `.exe` deverá atualizar pela página **Releases**;
+esse script é destinado a instalações feitas com `git clone`.
+
 ### Configuração sem perguntas
 
 Para automatizar a instalação, passe as opções diretamente:
