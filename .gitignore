@@ -15,6 +15,7 @@ dist/
 *.log
 claude_usage_cache.json
 settings.json
+config.json
 
 # Editors and operating systems
 .vscode/

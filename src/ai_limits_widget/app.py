@@ -31,8 +31,100 @@ RED = "#f47676"
 WINDOW_WIDTH = 356
 WINDOW_HEIGHT = 438
 COLLAPSED_HEIGHT = 42
-CODEX_REFRESH_SECONDS = 300
-CLAUDE_REFRESH_SECONDS = 300
+APP_DATA_DIR = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
+CONFIG_FILE = APP_DATA_DIR / "config.json"
+DEFAULT_CONFIG = {
+    "providers": ["codex", "claude"],
+    "refreshMinutes": 5,
+    "executables": {"codex": None, "claude": None},
+    "profiles": [],
+}
+
+
+def load_config() -> dict[str, Any]:
+    """Lê preferências locais sem jamais incluir credenciais."""
+    config = {
+        "providers": list(DEFAULT_CONFIG["providers"]),
+        "refreshMinutes": DEFAULT_CONFIG["refreshMinutes"],
+        "executables": dict(DEFAULT_CONFIG["executables"]),
+        "profiles": [],
+    }
+    try:
+        loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return config
+
+    providers = loaded.get("providers")
+    if isinstance(providers, list):
+        config["providers"] = [item for item in providers if item in {"codex", "claude"}]
+    try:
+        config["refreshMinutes"] = max(5, min(120, int(loaded.get("refreshMinutes", 5))))
+    except (TypeError, ValueError):
+        pass
+    executables = loaded.get("executables")
+    if isinstance(executables, dict):
+        for provider in ("codex", "claude"):
+            value = executables.get(provider)
+            config["executables"][provider] = value if isinstance(value, str) and value.strip() else None
+    if isinstance(loaded.get("profiles"), list):
+        config["profiles"] = loaded["profiles"]
+    return config
+
+
+def load_profiles() -> list[dict[str, Any]]:
+    """Carrega perfis configurados e converte a configuração antiga quando necessário."""
+    config = load_config()
+    loaded = config.get("profiles")
+    profiles: list[dict[str, Any]] = []
+    if isinstance(loaded, list):
+        for index, item in enumerate(loaded):
+            if not isinstance(item, dict) or item.get("provider") not in {"codex", "claude"}:
+                continue
+            provider = item["provider"]
+            label = str(item.get("label") or f"{provider.title()} {index + 1}").strip()
+            profiles.append(
+                {
+                    "id": str(item.get("id") or f"{provider}-{index + 1}"),
+                    "provider": provider,
+                    "label": label[:40],
+                    "executable": item.get("executable") if isinstance(item.get("executable"), str) else None,
+                    "configDir": item.get("configDir") if isinstance(item.get("configDir"), str) else None,
+                }
+            )
+    if profiles:
+        return profiles
+
+    executables = config["executables"]
+    for provider in config["providers"]:
+        profiles.append(
+            {
+                "id": f"{provider}-default",
+                "provider": provider,
+                "label": "Padrão",
+                "executable": executables.get(provider),
+                "configDir": None,
+            }
+        )
+    return profiles
+
+
+def configured_executable(path: str | None, commands: tuple[str, ...]) -> str | None:
+    if path and pathlib.Path(path).is_file():
+        return path
+    return next((found for command in commands if (found := shutil.which(command))), None)
+
+
+def profile_is_available(profile: dict[str, Any]) -> bool:
+    provider = profile["provider"]
+    executable = profile.get("executable")
+    commands = ("codex.exe", "codex.cmd", "codex") if provider == "codex" else ("claude.exe", "claude.cmd", "claude")
+    if not configured_executable(executable, commands):
+        return False
+    if provider == "claude":
+        config_dir = profile.get("configDir") or os.environ.get("CLAUDE_CONFIG_DIR")
+        credentials = (pathlib.Path(config_dir) / ".credentials.json") if config_dir else pathlib.Path.home() / ".claude" / ".credentials.json"
+        return credentials.is_file()
+    return True
 
 
 def clamp_percent(value: Any) -> int | None:
@@ -104,16 +196,20 @@ def is_on_monitor(x: int, y: int) -> bool:
 class CodexClient:
     """Cliente JSON-RPC mínimo para o app-server local do Codex."""
 
-    def __init__(self) -> None:
+    def __init__(self, executable: str | None = None, config_dir: str | None = None) -> None:
+        self.executable = executable
+        self.config_dir = config_dir
         self.process: subprocess.Popen[str] | None = None
         self.messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self.next_id = 1
         self.lock = threading.RLock()
 
     def _start(self) -> None:
-        executable = shutil.which("codex.exe" if os.name == "nt" else "codex")
+        executable = self.executable or configured_executable(
+            None, ("codex.exe", "codex.cmd", "codex") if os.name == "nt" else ("codex",)
+        )
         if not executable:
-            raise RuntimeError("Codex CLI não encontrado no PATH.")
+            raise RuntimeError("Codex CLI não encontrado. Execute scripts\\setup.ps1 para configurá-lo.")
 
         startupinfo = None
         creationflags = 0
@@ -123,6 +219,9 @@ class CodexClient:
             creationflags = subprocess.CREATE_NO_WINDOW
 
         self.messages = queue.Queue()
+        environment = os.environ.copy()
+        if self.config_dir:
+            environment["CODEX_HOME"] = self.config_dir
         self.process = subprocess.Popen(
             [executable, "app-server", "--stdio"],
             stdin=subprocess.PIPE,
@@ -134,6 +233,7 @@ class CodexClient:
             bufsize=1,
             startupinfo=startupinfo,
             creationflags=creationflags,
+            env=environment,
         )
         threading.Thread(target=self._reader, args=(self.process, self.messages), daemon=True).start()
         self._request(
@@ -223,7 +323,10 @@ class ClaudeClient:
 
     BACKOFF_SECONDS = (15 * 60, 30 * 60, 60 * 60)
 
-    def __init__(self) -> None:
+    def __init__(self, executable: str | None = None, config_dir: str | None = None, profile_id: str = "default") -> None:
+        self.executable = executable
+        self.config_dir = config_dir
+        self.profile_id = profile_id
         self.last_data: dict[str, Any] | None = None
         self.next_retry_at = 0.0
         self.backoff_index = 0
@@ -231,8 +334,7 @@ class ClaudeClient:
 
     @property
     def state_file(self) -> pathlib.Path:
-        base = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
-        return base / "claude_usage_cache.json"
+        return APP_DATA_DIR / f"claude_usage_cache_{self.profile_id}.json"
 
     def _load_state(self) -> None:
         try:
@@ -281,17 +383,16 @@ class ClaudeClient:
         return self._stale_result("Consulta do Claude temporariamente limitada.")
 
     def credentials_file(self) -> pathlib.Path:
-        base = os.environ.get("CLAUDE_CONFIG_DIR")
+        base = self.config_dir or os.environ.get("CLAUDE_CONFIG_DIR")
         return pathlib.Path(base) / ".credentials.json" if base else pathlib.Path.home() / ".claude" / ".credentials.json"
 
     def _refresh_access_token(self) -> bool:
-        candidates = [
-            shutil.which("claude.exe"),
-            shutil.which("claude.cmd"),
-            str(pathlib.Path(os.environ.get("APPDATA", "")) / "npm" / "claude.cmd"),
-            shutil.which("claude"),
-        ]
-        executable = next((item for item in candidates if item and pathlib.Path(item).exists()), None)
+        executable = self.executable or configured_executable(
+            None, ("claude.exe", "claude.cmd", "claude") if os.name == "nt" else ("claude",)
+        )
+        if not executable:
+            npm_cli = pathlib.Path(os.environ.get("APPDATA", "")) / "npm" / "claude.cmd"
+            executable = str(npm_cli) if npm_cli.is_file() else None
         if not executable:
             return False
 
@@ -310,6 +411,7 @@ class ClaudeClient:
                 timeout=30,
                 startupinfo=startupinfo,
                 creationflags=creationflags,
+                env={**os.environ, **({"CLAUDE_CONFIG_DIR": self.config_dir} if self.config_dir else {})},
                 check=False,
             )
             return result.returncode == 0
@@ -428,6 +530,10 @@ class Meter(tk.Frame):
 
 class UsageWidget:
     def __init__(self) -> None:
+        self.config = load_config()
+        self.profiles = [profile for profile in load_profiles() if profile_is_available(profile)]
+        self.refresh_seconds = self.config["refreshMinutes"] * 60
+        self.window_height = max(150, 96 + 142 * len(self.profiles))
         self.root = tk.Tk()
         self.root.title("Limites de IA")
         self.root.configure(bg=BG)
@@ -435,26 +541,29 @@ class UsageWidget:
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", 0.97)
         self.root.resizable(False, False)
-        self.codex = CodexClient()
-        self.claude = ClaudeClient()
+        self.clients: dict[str, CodexClient | ClaudeClient] = {}
+        for profile in self.profiles:
+            if profile["provider"] == "codex":
+                self.clients[profile["id"]] = CodexClient(profile["executable"], profile["configDir"])
+            else:
+                self.clients[profile["id"]] = ClaudeClient(profile["executable"], profile["configDir"], profile["id"])
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.refreshing = False
         self.collapsed = False
         self.topmost = True
         self.drag_origin = (0, 0)
-        self.last_claude_at = 0.0
-        self.warnings: dict[str, str | None] = {"codex": None, "claude": None}
+        self.last_claude_at: dict[str, float] = {}
+        self.warnings: dict[str, str | None] = {profile["id"]: None for profile in self.profiles}
         self._place_window()
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(100, self._drain_events)
         self.root.after(250, lambda: self.refresh(force_claude=True))
-        self.root.after(CODEX_REFRESH_SECONDS * 1000, self._scheduled_refresh)
+        self.root.after(self.refresh_seconds * 1000, self._scheduled_refresh)
 
     @property
     def settings_file(self) -> pathlib.Path:
-        base = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
-        return base / "settings.json"
+        return APP_DATA_DIR / "settings.json"
 
     def _place_window(self) -> None:
         default = (self.root.winfo_screenwidth() - WINDOW_WIDTH - 24, 70)
@@ -469,7 +578,7 @@ class UsageWidget:
         x, y = fit_to_bounds(x, y, virtual_screen_bounds(self.root))
         if not is_on_monitor(x, y):
             x, y = default
-        self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}+{x}+{y}")
+        self.root.geometry(f"{WINDOW_WIDTH}x{self.window_height}+{x}+{y}")
 
     def _build(self) -> None:
         titlebar = tk.Frame(self.root, bg=PANEL_2, height=42, highlightbackground=LINE, highlightthickness=1)
@@ -490,31 +599,36 @@ class UsageWidget:
 
         self.body = tk.Frame(self.root, bg=BG)
         self.body.pack(fill="both", expand=True, padx=12, pady=(6, 10))
-        self._provider_title("CODEX", "OPENAI", CLAUDE_PURPLE)
-        codex_grid = tk.Frame(self.body, bg=BG)
-        codex_grid.pack(fill="x")
-        codex_grid.columnconfigure(0, weight=1, uniform="meters")
-        codex_grid.columnconfigure(1, weight=1, uniform="meters")
-        self.codex_short = Meter(codex_grid, "5 horas", CLAUDE_PURPLE)
-        self.codex_short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.codex_week = Meter(codex_grid, "Semana", CLAUDE_PURPLE)
-        self.codex_week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
-
-        self._provider_title("CLAUDE CODE", "ANTHROPIC", ORANGE)
-        claude_grid = tk.Frame(self.body, bg=BG)
-        claude_grid.pack(fill="x")
-        claude_grid.columnconfigure(0, weight=1, uniform="meters")
-        claude_grid.columnconfigure(1, weight=1, uniform="meters")
-        self.claude_short = Meter(claude_grid, "5 horas", ORANGE)
-        self.claude_short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.claude_week = Meter(claude_grid, "Semana", ORANGE)
-        self.claude_week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.meters: dict[str, tuple[Meter, Meter]] = {}
+        if not self.profiles:
+            tk.Label(
+                self.body,
+                text="Nenhuma conta local encontrada.\nExecute scripts\\setup.ps1 para adicionar um perfil.",
+                bg=BG,
+                fg=MUTED,
+                justify="left",
+                font=("Segoe UI", 9),
+            ).pack(anchor="w", pady=16)
+        for profile in self.profiles:
+            accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
+            company = "OPENAI" if profile["provider"] == "codex" else "ANTHROPIC"
+            title = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
+            self._provider_title(f"{title} · {profile['label'].upper()}", company, accent)
+            grid = tk.Frame(self.body, bg=BG)
+            grid.pack(fill="x")
+            grid.columnconfigure(0, weight=1, uniform="meters")
+            grid.columnconfigure(1, weight=1, uniform="meters")
+            short = Meter(grid, "5 horas", accent)
+            short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+            week = Meter(grid, "Semana", accent)
+            week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+            self.meters[profile["id"]] = (short, week)
 
         self.status = tk.Label(self.body, text="Conectando…", bg=BG, fg=MUTED, font=("Segoe UI", 8), anchor="w")
         self.status.pack(fill="x", pady=(12, 0))
         self.legend = tk.Label(
             self.body,
-            text="Percentual restante · atualização automática",
+            text=f"Percentual restante · atualização a cada {self.config['refreshMinutes']} min",
             bg=BG,
             fg="#62685b",
             font=("Segoe UI", 8),
@@ -566,7 +680,7 @@ class UsageWidget:
             self.root.geometry(f"{WINDOW_WIDTH}x{COLLAPSED_HEIGHT}")
         else:
             self.body.pack(fill="both", expand=True, padx=12, pady=(6, 10))
-            self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+            self.root.geometry(f"{WINDOW_WIDTH}x{self.window_height}")
 
     def toggle_topmost(self) -> None:
         self.topmost = not self.topmost
@@ -575,7 +689,7 @@ class UsageWidget:
 
     def _scheduled_refresh(self) -> None:
         self.refresh(force_claude=False)
-        self.root.after(CODEX_REFRESH_SECONDS * 1000, self._scheduled_refresh)
+        self.root.after(self.refresh_seconds * 1000, self._scheduled_refresh)
 
     def refresh(self, force_claude: bool = False) -> None:
         if self.refreshing:
@@ -585,45 +699,44 @@ class UsageWidget:
         threading.Thread(target=self._refresh_worker, args=(force_claude,), daemon=True).start()
 
     def _refresh_worker(self, force_claude: bool) -> None:
-        try:
-            self.events.put(("codex", self.codex.read_limits()))
-        except Exception as exc:
-            self.events.put(("codex_error", str(exc)))
-
-        should_read_claude = force_claude or time.monotonic() - self.last_claude_at >= CLAUDE_REFRESH_SECONDS
-        if should_read_claude:
+        for profile in self.profiles:
+            profile_id = profile["id"]
+            client = self.clients[profile_id]
             try:
-                self.events.put(("claude", self.claude.read_limits()))
-                self.last_claude_at = time.monotonic()
+                if profile["provider"] == "claude" and not (
+                    force_claude or time.monotonic() - self.last_claude_at.get(profile_id, 0.0) >= self.refresh_seconds
+                ):
+                    continue
+                self.events.put(("profile", (profile, client.read_limits())))
+                if profile["provider"] == "claude":
+                    self.last_claude_at[profile_id] = time.monotonic()
             except Exception as exc:
-                self.events.put(("claude_error", str(exc)))
+                self.events.put(("profile_error", (profile, str(exc))))
         self.events.put(("done", None))
 
     def _drain_events(self) -> None:
         try:
             while True:
                 kind, payload = self.events.get_nowait()
-                if kind == "codex":
-                    self._update_meter(self.codex_short, payload.get("primary"))
-                    self._update_meter(self.codex_week, payload.get("secondary"))
-                    self.warnings["codex"] = None
-                elif kind == "claude":
-                    self._update_meter(self.claude_short, payload.get("five_hour"))
-                    self._update_meter(self.claude_week, payload.get("seven_day"))
-                    if payload.get("stale"):
-                        fetched = dt.datetime.fromtimestamp(payload.get("fetchedAt", 0)).strftime("%H:%M")
-                        retry = dt.datetime.fromtimestamp(payload.get("nextRetryAt", 0)).strftime("%H:%M")
-                        self.warnings["claude"] = f"Claude: dados de {fetched} · nova tentativa {retry}"
+                if kind == "profile":
+                    profile, data = payload
+                    short, week = self.meters[profile["id"]]
+                    first = data.get("primary") if profile["provider"] == "codex" else data.get("five_hour")
+                    second = data.get("secondary") if profile["provider"] == "codex" else data.get("seven_day")
+                    self._update_meter(short, first)
+                    self._update_meter(week, second)
+                    if profile["provider"] == "claude" and data.get("stale"):
+                        fetched = dt.datetime.fromtimestamp(data.get("fetchedAt", 0)).strftime("%H:%M")
+                        retry = dt.datetime.fromtimestamp(data.get("nextRetryAt", 0)).strftime("%H:%M")
+                        self.warnings[profile["id"]] = f"{profile['label']}: dados de {fetched} · nova tentativa {retry}"
                     else:
-                        self.warnings["claude"] = None
-                elif kind == "codex_error":
-                    self.codex_short.set_error(payload)
-                    self.codex_week.set_error("Codex indisponível")
-                    self.warnings["codex"] = "Codex indisponível"
-                elif kind == "claude_error":
-                    self.claude_short.set_error(payload)
-                    self.claude_week.set_error("Claude indisponível")
-                    self.warnings["claude"] = payload
+                        self.warnings[profile["id"]] = None
+                elif kind == "profile_error":
+                    profile, message = payload
+                    short, week = self.meters[profile["id"]]
+                    short.set_error(message)
+                    week.set_error(f"{profile['label']} indisponível")
+                    self.warnings[profile["id"]] = message
                 elif kind == "done":
                     self.refreshing = False
                     warnings = [warning for warning in self.warnings.values() if warning]
@@ -644,7 +757,9 @@ class UsageWidget:
 
     def close(self) -> None:
         self._save_position()
-        self.codex.close()
+        for client in self.clients.values():
+            if isinstance(client, CodexClient):
+                client.close()
         self.root.destroy()
 
     def run(self) -> None:
@@ -652,23 +767,25 @@ class UsageWidget:
 
 
 def print_once() -> None:
-    codex = CodexClient()
+    profiles = [profile for profile in load_profiles() if profile_is_available(profile)]
+    if not profiles:
+        raise RuntimeError("Nenhum provedor foi configurado. Execute scripts\\setup.ps1.")
     try:
-        codex_data = codex.read_limits()
-        claude_data = ClaudeClient().read_limits()
-        output = {
-            "codex": {
-                "five_hour_remaining": remaining((codex_data.get("primary") or {}).get("usedPercent")),
-                "weekly_remaining": remaining((codex_data.get("secondary") or {}).get("usedPercent")),
-            },
-            "claude": {
-                "five_hour_remaining": remaining((claude_data.get("five_hour") or {}).get("usedPercent")),
-                "weekly_remaining": remaining((claude_data.get("seven_day") or {}).get("usedPercent")),
-            },
-        }
+        output: dict[str, Any] = {}
+        for profile in profiles:
+            if profile["provider"] == "codex":
+                data = CodexClient(profile["executable"], profile["configDir"]).read_limits()
+                first, second = data.get("primary"), data.get("secondary")
+            else:
+                data = ClaudeClient(profile["executable"], profile["configDir"], profile["id"]).read_limits()
+                first, second = data.get("five_hour"), data.get("seven_day")
+            output[f"{profile['provider']}:{profile['label']}"] = {
+                "five_hour_remaining": remaining((first or {}).get("usedPercent")),
+                "weekly_remaining": remaining((second or {}).get("usedPercent")),
+            }
         print(json.dumps(output, ensure_ascii=False, indent=2))
     finally:
-        codex.close()
+        pass
 
 
 def main() -> None:

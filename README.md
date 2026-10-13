@@ -42,19 +42,25 @@ na respectiva seção.
    cd ai-limits-widget
    ```
 
-2. Inicie o widget:
+2. Execute a configuração guiada:
+
+   ```powershell
+   .\scripts\setup.ps1
+   ```
+
+   Ela pergunta quais provedores serão usados, detecta os CLIs instalados,
+   permite informar um caminho alternativo, configura o intervalo de atualização
+   e pode criar um atalho na Área de Trabalho. Ao final, também permite cadastrar
+   perfis extras, como uma conta pessoal e outra de trabalho. Nenhuma credencial
+   é pedida ou salva.
+
+3. Inicie o widget:
 
    ```powershell
    .\scripts\start.ps1
    ```
 
-   Ou execute diretamente:
-
-   ```powershell
-   python .\src\ai_limits_widget\app.py
-   ```
-
-3. Para encerrar apenas este widget:
+4. Para encerrar apenas este widget:
 
    ```powershell
    .\scripts\stop.ps1
@@ -62,6 +68,35 @@ na respectiva seção.
 
 O widget pode ser arrastado pela barra superior, lembra sua posição e possui
 botões para atualizar, fixar, recolher e encerrar.
+
+### Configuração sem perguntas
+
+Para automatizar a instalação, passe as opções diretamente:
+
+```powershell
+.\scripts\setup.ps1 -Providers both -RefreshMinutes 5 -CreateDesktopShortcut -Start
+```
+
+Os valores aceitos em `-Providers` são `codex`, `claude` e `both`. Se a
+CLI não estiver no PATH, informe seu arquivo executável — por exemplo,
+`-ClaudePath 'D:\ferramentas\claude.cmd'`. Os caminhos são opcionais: o
+widget tenta encontrar as ferramentas novamente a cada abertura.
+
+### Várias contas
+
+O widget mostra um cartão para cada perfil local que consegue identificar. O
+instalador cria os perfis padrão e, no modo guiado, permite adicionar outros.
+Para uma segunda conta, informe um nome de exibição e o diretório de
+configuração usado por ela:
+
+- Codex: o diretório definido como `CODEX_HOME` para aquele perfil;
+- Claude Code: o diretório definido como `CLAUDE_CONFIG_DIR` para aquele
+  perfil, contendo o arquivo de credencial local.
+
+Se a CLI ou a configuração de um perfil não existir, ele fica oculto — não há
+uma barra vazia para provedores indisponíveis. O aplicativo nunca procura
+credenciais em pastas arbitrárias: ele usa apenas o perfil padrão ou os
+diretórios que a própria pessoa indicou no instalador.
 
 ## Configuração dos provedores
 
