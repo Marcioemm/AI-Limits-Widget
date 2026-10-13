@@ -591,7 +591,8 @@ class UsageWidget:
         self.config = load_config()
         self.profiles = [profile for profile in load_profiles() if profile_is_available(profile)]
         self.refresh_seconds = self.config["refreshMinutes"] * 60
-        self.window_height = max(150, 96 + 142 * len(self.profiles))
+        # Reserva espaço para o rodapé com o horário da última atualização.
+        self.window_height = max(168, 114 + 142 * len(self.profiles))
         self.root = tk.Tk()
         self.root.title("Limites de IA")
         self.root.configure(bg=BG)
@@ -614,6 +615,11 @@ class UsageWidget:
         self.warnings: dict[str, str | None] = {profile["id"]: None for profile in self.profiles}
         self._place_window()
         self._build()
+        # A quantidade de cartões e as métricas de fonte do Windows variam.
+        # Mede o layout pronto para que o rodapé nunca seja cortado.
+        self.root.update_idletasks()
+        self.window_height = max(self.window_height, self.root.winfo_reqheight())
+        self._place_window()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(100, self._drain_events)
         self.root.after(250, lambda: self.refresh(force_claude=True))
@@ -684,15 +690,15 @@ class UsageWidget:
 
         self.status = tk.Label(self.body, text="Conectando…", bg=BG, fg=MUTED, font=("Segoe UI", 8), anchor="w")
         self.status.pack(fill="x", pady=(12, 0))
-        self.legend = tk.Label(
+        self.last_updated = tk.Label(
             self.body,
-            text=f"Percentual restante · atualização a cada {self.config['refreshMinutes']} min",
+            text="Última atualização: —",
             bg=BG,
             fg="#62685b",
             font=("Segoe UI", 8),
             anchor="w",
         )
-        self.legend.pack(fill="x", pady=(2, 0))
+        self.last_updated.pack(fill="x", pady=(2, 0))
 
     def _button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
         return tk.Button(
@@ -797,11 +803,12 @@ class UsageWidget:
                     self.warnings[profile["id"]] = message
                 elif kind == "done":
                     self.refreshing = False
+                    self.last_updated.configure(text=f"Última atualização: {dt.datetime.now():%H:%M}")
                     warnings = [warning for warning in self.warnings.values() if warning]
                     if warnings:
                         self.status.configure(text=" · ".join(warnings), fg=YELLOW)
                     else:
-                        self.status.configure(text=f"Atualizado às {dt.datetime.now():%H:%M}", fg=MUTED)
+                        self.status.configure(text="Atualização concluída", fg=MUTED)
         except queue.Empty:
             pass
         self.root.after(100, self._drain_events)
