@@ -39,6 +39,7 @@ CONFIG_FILE = APP_DATA_DIR / "config.json"
 DEFAULT_CONFIG = {
     "providers": ["codex", "claude"],
     "refreshMinutes": 5,
+    "layout": "cards",
     "executables": {"codex": None, "claude": None},
     "profiles": [],
 }
@@ -51,6 +52,7 @@ def load_config() -> dict[str, Any]:
     config = {
         "providers": list(DEFAULT_CONFIG["providers"]),
         "refreshMinutes": DEFAULT_CONFIG["refreshMinutes"],
+        "layout": DEFAULT_CONFIG["layout"],
         "executables": dict(DEFAULT_CONFIG["executables"]),
         "profiles": [],
     }
@@ -66,6 +68,8 @@ def load_config() -> dict[str, Any]:
         config["refreshMinutes"] = max(5, min(120, int(loaded.get("refreshMinutes", 5))))
     except (TypeError, ValueError):
         pass
+    if loaded.get("layout") in {"cards", "compact"}:
+        config["layout"] = loaded["layout"]
     executables = loaded.get("executables")
     if isinstance(executables, dict):
         for provider in ("codex", "claude"):
@@ -597,6 +601,50 @@ class Meter(tk.Frame):
             self.canvas.create_line(x, 3, x, height - 4, fill=PANEL, width=2)
 
 
+class CompactMeter(tk.Frame):
+    """Uma faixa horizontal de limite para o modo compacto."""
+
+    def __init__(self, master: tk.Misc, title: str, accent: str) -> None:
+        super().__init__(master, bg=PANEL)
+        self.accent = accent
+        self.columnconfigure(0, weight=1)
+        self.title = tk.Label(self, text=title.upper(), bg=PANEL, fg=accent, font=("Segoe UI", 8, "bold"))
+        self.title.grid(row=0, column=0, sticky="w", padx=(11, 8), pady=(8, 1))
+        self.value = tk.Label(self, text="—", bg=PANEL, fg=TEXT, font=("Segoe UI", 17, "bold"))
+        self.value.grid(row=0, column=1, sticky="e", padx=(0, 11), pady=(5, 0))
+        self.canvas = tk.Canvas(self, height=5, bg=PANEL, highlightthickness=0)
+        self.canvas.grid(row=1, column=0, columnspan=2, sticky="ew", padx=11, pady=(1, 8))
+        self.percent: int | None = None
+        self.canvas.bind("<Configure>", lambda _event: self._draw())
+
+    def set_title(self, title: str) -> None:
+        self.title.configure(text=title.upper())
+
+    def set_data(self, used: Any, resets_at: Any) -> None:
+        self.percent = remaining(used)
+        self.value.configure(text="—" if self.percent is None else f"{self.percent}%")
+        self._draw()
+
+    def set_error(self, message: str) -> None:
+        self.percent = None
+        self.value.configure(text="—")
+        self._draw()
+
+    def set_unavailable(self, message: str) -> None:
+        self.percent = None
+        self.value.configure(text="—")
+        self._draw()
+
+    def _draw(self) -> None:
+        self.canvas.delete("all")
+        width = max(8, self.canvas.winfo_width())
+        self.canvas.create_rectangle(0, 0, width, 5, fill=LINE, outline="")
+        if self.percent is None:
+            return
+        color = RED if self.percent < 15 else YELLOW if self.percent < 35 else self.accent
+        self.canvas.create_rectangle(0, 0, width * self.percent / 100, 5, fill=color, outline="")
+
+
 class SettingsDialog(tk.Toplevel):
     """Configuração local. Nunca lê ou grava tokens, apenas caminhos e perfis."""
 
@@ -761,7 +809,8 @@ class SettingsDialog(tk.Toplevel):
         try:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
-                                               "executables": executables, "profiles": profiles}, ensure_ascii=False, indent=2), encoding="utf-8")
+                                               "layout": self.widget.layout, "executables": executables,
+                                               "profiles": profiles}, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError as exc:
             messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)
             return
@@ -776,6 +825,8 @@ class UsageWidget:
         self.last_claude_at: dict[str, float] = {}
         self.warnings: dict[str, str | None] = {}
         self.last_windows: dict[str, dict[str, int | None]] = {}
+        self.last_meter_data: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] = {}
+        self.last_meter_errors: dict[str, str] = {}
         self.refresh_scheduled = False
         self._discover_profiles()
         self.window_height = max(168, 114 + 142 * len(self.profiles))
@@ -804,6 +855,7 @@ class UsageWidget:
 
     def _discover_profiles(self) -> None:
         self.config = load_config()
+        self.layout = self.config["layout"]
         self.configured_profiles = load_profiles()
         self.unavailable_profiles = [
             (profile, reason) for profile in self.configured_profiles if (reason := profile_unavailable_reason(profile))
@@ -819,6 +871,8 @@ class UsageWidget:
         self.last_claude_at = {}
         self.warnings = {profile["id"]: None for profile in self.profiles}
         self.last_windows = {}
+        self.last_meter_data = {}
+        self.last_meter_errors = {}
 
     def _close_clients(self) -> None:
         for client in self.clients.values():
@@ -867,6 +921,8 @@ class UsageWidget:
         self.pin_button = self._button(titlebar, "●", self.toggle_topmost)
         self.pin_button.configure(fg=ORANGE)
         self.pin_button.pack(side="right")
+        self.layout_button = self._button(titlebar, "▤" if self.layout == "cards" else "▥", self.toggle_layout)
+        self.layout_button.pack(side="right")
         self._button(titlebar, "⚙", self.open_settings).pack(side="right")
         self._button(titlebar, "?", self.copy_diagnostics).pack(side="right")
         self._button(titlebar, "↻", self.refresh_or_rescan).pack(side="right")
@@ -880,7 +936,8 @@ class UsageWidget:
         self._build_body()
 
     def _build_body(self) -> None:
-        self.meters: dict[str, tuple[Meter, Meter]] = {}
+        self.meters: dict[str, tuple[Meter | CompactMeter, Meter | CompactMeter | None]] = {}
+        self.compact_headings: dict[str, str] = {}
         if not self.profiles:
             instructions = "Para acompanhar seus limites, instale e autentique pelo menos uma CLI:\n\n"
             instructions += "\n".join(f"• {reason}" for _, reason in self.unavailable_profiles)
@@ -906,21 +963,30 @@ class UsageWidget:
             accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
             company = "OPENAI" if profile["provider"] == "codex" else "ANTHROPIC"
             title = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
-            self._provider_title(f"{title} · {profile['label'].upper()}", company, accent)
-            grid = tk.Frame(self.body, bg=BG)
-            grid.pack(fill="x")
-            grid.columnconfigure(0, weight=1, uniform="meters")
-            grid.columnconfigure(1, weight=1, uniform="meters")
-            short = Meter(grid, "5 horas", accent)
-            short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-            week = Meter(grid, "Semana", accent)
-            week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+            if self.layout == "compact":
+                heading = f"{title} · {profile['label']}"
+                self.compact_headings[profile["id"]] = heading
+                short = CompactMeter(self.body, f"{heading} · 5 horas", accent)
+                short.configure(highlightbackground=accent, highlightthickness=1)
+                short.pack(fill="x", pady=(7, 0))
+                week = None
+            else:
+                self._provider_title(f"{title} · {profile['label'].upper()}", company, accent)
+                grid = tk.Frame(self.body, bg=BG)
+                grid.pack(fill="x")
+                grid.columnconfigure(0, weight=1, uniform="meters")
+                grid.columnconfigure(1, weight=1, uniform="meters")
+                short = Meter(grid, "5 horas", accent)
+                short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+                week = Meter(grid, "Semana", accent)
+                week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
             self.meters[profile["id"]] = (short, week)
 
         status_text = "Conectando…" if self.profiles else "Aguardando uma CLI disponível"
         status_color = MUTED if self.profiles else YELLOW
         self.status = tk.Label(self.body, text=status_text, bg=BG, fg=status_color, font=("Segoe UI", 8), anchor="w")
-        self.status.pack(fill="x", pady=(12, 0))
+        if self.layout != "compact":
+            self.status.pack(fill="x", pady=(12, 0))
         self.last_updated = tk.Label(
             self.body,
             text="Última atualização: —",
@@ -929,7 +995,8 @@ class UsageWidget:
             font=("Segoe UI", 8),
             anchor="w",
         )
-        self.last_updated.pack(fill="x", pady=(2, 0))
+        if self.layout != "compact":
+            self.last_updated.pack(fill="x", pady=(2, 0))
 
     def _action_button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
         return tk.Button(
@@ -988,6 +1055,32 @@ class UsageWidget:
         self.root.attributes("-topmost", self.topmost)
         self.pin_button.configure(fg=ORANGE if self.topmost else MUTED)
 
+    def toggle_layout(self) -> None:
+        # A troca de aparência não inicia uma consulta: reaproveita o último
+        # resultado recebido, inclusive enquanto uma atualização está em curso.
+        status_text, status_color = self.status.cget("text"), self.status.cget("fg")
+        updated_text = self.last_updated.cget("text")
+        self.layout = "compact" if self.layout == "cards" else "cards"
+        self.config["layout"] = self.layout
+        try:
+            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CONFIG_FILE.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+        for child in self.body.winfo_children():
+            child.destroy()
+        self._build_body()
+        for profile in self.profiles:
+            saved = self.last_meter_data.get(profile["id"])
+            if saved:
+                self._render_profile_meters(profile, *saved)
+            if message := self.last_meter_errors.get(profile["id"]):
+                self._render_profile_error(profile, message)
+        self.layout_button.configure(text="▤" if self.layout == "cards" else "▥")
+        self.status.configure(text=status_text, fg=status_color)
+        self.last_updated.configure(text=updated_text)
+        self._resize_to_content()
+
     def _scheduled_refresh(self) -> None:
         self.refresh_scheduled = False
         self.refresh(force_claude=False)
@@ -1037,7 +1130,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.3",
+            "versao": "0.1.7",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [
@@ -1088,8 +1181,9 @@ class UsageWidget:
                     short, week = self.meters[profile["id"]]
                     first = data.get("primary") if profile["provider"] == "codex" else data.get("five_hour")
                     second = data.get("secondary") if profile["provider"] == "codex" else data.get("seven_day")
-                    self._update_meter(short, first)
-                    self._update_meter(week, second)
+                    self.last_meter_data[profile["id"]] = (first, second)
+                    self.last_meter_errors.pop(profile["id"], None)
+                    self._render_profile_meters(profile, first, second)
                     self.last_windows[profile["id"]] = {
                         "cincoHoras": (first or {}).get("windowDurationMins"),
                         "semana": (second or {}).get("windowDurationMins"),
@@ -1102,9 +1196,8 @@ class UsageWidget:
                         self.warnings[profile["id"]] = None
                 elif kind == "profile_error":
                     profile, message = payload
-                    short, week = self.meters[profile["id"]]
-                    short.set_error(message)
-                    week.set_error(f"{profile['label']} indisponível")
+                    self._render_profile_error(profile, message)
+                    self.last_meter_errors[profile["id"]] = message
                     self.warnings[profile["id"]] = message
                 elif kind == "done":
                     self.refreshing = False
@@ -1119,11 +1212,33 @@ class UsageWidget:
         self.root.after(100, self._drain_events)
 
     @staticmethod
-    def _update_meter(meter: Meter, data: dict[str, Any] | None) -> None:
+    def _update_meter(meter: Meter | CompactMeter, data: dict[str, Any] | None) -> None:
         if data and data.get("usedPercent") is not None:
             meter.set_data(data.get("usedPercent"), data.get("resetsAt"))
         else:
             meter.set_unavailable("Não informado pela CLI")
+
+    def _render_profile_meters(
+        self, profile: dict[str, Any], first: dict[str, Any] | None, second: dict[str, Any] | None
+    ) -> None:
+        short, week = self.meters[profile["id"]]
+        if self.layout == "compact":
+            data = first or second
+            period = "5 horas" if first else "Semana"
+            heading = self.compact_headings[profile["id"]]
+            if isinstance(short, CompactMeter):
+                short.set_title(f"{heading} · {period}")
+            self._update_meter(short, data)
+            return
+        self._update_meter(short, first)
+        if week:
+            self._update_meter(week, second)
+
+    def _render_profile_error(self, profile: dict[str, Any], message: str) -> None:
+        short, week = self.meters[profile["id"]]
+        short.set_error(message)
+        if week:
+            week.set_error(f"{profile['label']} indisponível")
 
     def close(self) -> None:
         self._save_position()
