@@ -683,6 +683,12 @@ class BatteryMeter(tk.Canvas):
         self.error = False
         self.bind("<Configure>", lambda _event: self._draw())
 
+    def set_hover_handlers(self, on_enter: Any, on_leave: Any) -> None:
+        """Permite revelar detalhes sem acoplar o medidor à janela principal."""
+        self.bind("<Enter>", lambda _event: on_enter(self))
+        self.bind("<Motion>", lambda _event: on_enter(self))
+        self.bind("<Leave>", lambda _event: on_leave(self))
+
     def set_data(self, used: Any, _resets_at: Any) -> None:
         self.percent = remaining(used)
         self.error = False
@@ -903,6 +909,8 @@ class UsageWidget:
         self.last_windows: dict[str, dict[str, int | None]] = {}
         self.last_meter_data: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] = {}
         self.last_meter_errors: dict[str, str] = {}
+        self.compact_details: dict[str, dict[str, Any]] = {}
+        self.last_refresh_text = "Última atualização: —"
         self.refresh_scheduled = False
         self._discover_profiles()
         self.window_height = max(102 if self.layout == "compact" else 168, 114 + 142 * len(self.profiles))
@@ -917,6 +925,15 @@ class UsageWidget:
         self.collapsed = False
         self.topmost = True
         self.drag_origin = (0, 0)
+        self.hover_after: str | None = None
+        self.hide_hover_after: str | None = None
+        self.hover_meter: BatteryMeter | None = None
+        self.hover_panel: tk.Frame | None = None
+        self.hover_title: tk.Label | None = None
+        self.hover_window: tk.Label | None = None
+        self.hover_value: tk.Label | None = None
+        self.hover_reset: tk.Label | None = None
+        self.hover_updated: tk.Label | None = None
         self._place_window()
         self._build()
         # A quantidade de cartões e as métricas de fonte do Windows variam.
@@ -925,6 +942,7 @@ class UsageWidget:
         self._resize_to_content()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(100, self._drain_events)
+        self.root.after(200, self._poll_hover_target)
         if self.profiles:
             self.root.after(250, lambda: self.refresh(force_claude=True))
             self._schedule_refresh()
@@ -1000,6 +1018,12 @@ class UsageWidget:
 
     def _build_body(self) -> None:
         self.meters: dict[str, tuple[Meter | BatteryMeter, Meter | BatteryMeter | None]] = {}
+        self.hover_panel = None
+        self.hover_title = None
+        self.hover_window = None
+        self.hover_value = None
+        self.hover_reset = None
+        self.hover_updated = None
         if not self.profiles:
             instructions = "Para acompanhar seus limites, instale e autentique pelo menos uma CLI:\n\n"
             instructions += "\n".join(f"• {reason}" for _, reason in self.unavailable_profiles)
@@ -1035,6 +1059,10 @@ class UsageWidget:
             if self.layout == "compact":
                 assert compact_grid is not None
                 short = BatteryMeter(compact_grid, accent)
+                short.set_hover_handlers(
+                    lambda meter, current=profile: self._schedule_hover_details(current, meter),
+                    self._defer_hide_hover_details,
+                )
                 column = index % 2
                 short.grid(row=index // 2, column=column, sticky="ew", padx=(0, 5) if column == 0 else (5, 0), pady=(0, 8))
                 week = None
@@ -1049,6 +1077,26 @@ class UsageWidget:
                 week = Meter(grid, "Semana", accent)
                 week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
             self.meters[profile["id"]] = (short, week)
+
+        if self.layout == "compact" and self.profiles:
+            self.hover_panel = tk.Frame(self.body, bg=PANEL_2, highlightbackground=LINE, highlightthickness=1)
+            self.hover_title = tk.Label(self.hover_panel, bg=PANEL_2, font=("Segoe UI", 9, "bold"), anchor="w")
+            self.hover_title.pack(fill="x", padx=10, pady=(8, 2))
+            self.hover_window = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
+                                         font=("Segoe UI", 8, "bold"), anchor="w")
+            self.hover_window.pack(fill="x", padx=10)
+            self.hover_value = tk.Label(self.hover_panel, bg=PANEL_2, fg=TEXT,
+                                        font=("Segoe UI", 15, "bold"), anchor="w")
+            self.hover_value.pack(fill="x", padx=10, pady=(1, 2))
+            self.hover_reset = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
+                                        font=("Segoe UI", 8), anchor="w")
+            self.hover_reset.pack(fill="x", padx=10)
+            self.hover_updated = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
+                                          font=("Segoe UI", 8), anchor="w")
+            self.hover_updated.pack(fill="x", padx=10, pady=(2, 8))
+            for child in (self.hover_panel, *self.hover_panel.winfo_children()):
+                child.bind("<Enter>", lambda _event: self._cancel_hide_hover_timer())
+                child.bind("<Leave>", lambda _event: self._defer_hide_hover_details(self.hover_meter))
 
         status_text = "Conectando…" if self.profiles else "Aguardando uma CLI disponível"
         status_color = MUTED if self.profiles else YELLOW
@@ -1105,7 +1153,97 @@ class UsageWidget:
         # volta ao monitor principal para nunca iniciar fora da tela.
         return
 
+    def _cancel_hover_timer(self) -> None:
+        if self.hover_after:
+            self.root.after_cancel(self.hover_after)
+            self.hover_after = None
+
+    def _cancel_hide_hover_timer(self) -> None:
+        if self.hide_hover_after:
+            self.root.after_cancel(self.hide_hover_after)
+            self.hide_hover_after = None
+
+    def _schedule_hover_details(self, profile: dict[str, Any], meter: BatteryMeter) -> None:
+        """Mostra o painel somente após um segundo contínuo sobre a bateria."""
+        panel_visible = bool(self.hover_panel and self.hover_panel.winfo_manager())
+        if self.hover_meter is meter and (self.hover_after or panel_visible):
+            return
+        self._cancel_hover_timer()
+        self._cancel_hide_hover_timer()
+        if self.hover_meter is not meter:
+            self._hide_hover_details()
+        self.hover_meter = meter
+        self.hover_after = self.root.after(1000, lambda: self._show_hover_details(profile, meter))
+
+    def _poll_hover_target(self) -> None:
+        """Cobre o caso em que o widget aparece já sob um cursor parado."""
+        try:
+            target = self.root.winfo_containing(self.root.winfo_pointerx(), self.root.winfo_pointery())
+            if self._is_inside_hover_panel(target):
+                self._cancel_hide_hover_timer()
+            else:
+                for profile in self.profiles:
+                    meter, _week = self.meters.get(profile["id"], (None, None))
+                    if isinstance(meter, BatteryMeter) and target is meter:
+                        self._schedule_hover_details(profile, meter)
+                        break
+                else:
+                    if self.hover_meter:
+                        self._defer_hide_hover_details(self.hover_meter)
+        except tk.TclError:
+            return
+        self.root.after(200, self._poll_hover_target)
+
+    def _is_inside_hover_panel(self, target: tk.Misc | None) -> bool:
+        current = target
+        while current:
+            if current is self.hover_panel:
+                return True
+            current = current.master
+        return False
+
+    def _defer_hide_hover_details(self, meter: BatteryMeter | None) -> None:
+        if meter is None or meter is not self.hover_meter:
+            return
+        self._cancel_hover_timer()
+        self._cancel_hide_hover_timer()
+        # Dá tempo de o cursor atravessar da bateria para o painel expandido.
+        self.hide_hover_after = self.root.after(180, self._hide_hover_details)
+
+    def _hide_hover_details(self) -> None:
+        self._cancel_hover_timer()
+        self._cancel_hide_hover_timer()
+        self.hover_meter = None
+        if self.hover_panel and self.hover_panel.winfo_exists() and self.hover_panel.winfo_manager():
+            self.hover_panel.pack_forget()
+            if self.root.winfo_exists():
+                self._resize_to_content()
+
+    def _show_hover_details(self, profile: dict[str, Any], meter: BatteryMeter) -> None:
+        self.hover_after = None
+        if self.layout != "compact" or meter is not self.hover_meter or not meter.winfo_exists():
+            return
+        details = self.compact_details.get(profile["id"], {})
+        accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
+        provider = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
+        percent = details.get("percent")
+        value = "—" if percent is None else f"{percent}% restante"
+        message = details.get("message") or format_reset(details.get("resetsAt"))
+        if not all((self.hover_panel, self.hover_title, self.hover_window, self.hover_value,
+                    self.hover_reset, self.hover_updated)):
+            return
+        self.hover_panel.configure(highlightbackground=accent)
+        self.hover_title.configure(text=f"{provider} · {profile['label'].upper()}", fg=accent)
+        self.hover_window.configure(text=details.get("window", "LIMITE"))
+        self.hover_value.configure(text=value)
+        self.hover_reset.configure(text=message, fg=RED if details.get("error") else MUTED)
+        self.hover_updated.configure(text=self.last_refresh_text)
+        if not self.hover_panel.winfo_manager():
+            self.hover_panel.pack(fill="x", pady=(2, 6))
+            self._resize_to_content()
+
     def toggle_collapse(self) -> None:
+        self._hide_hover_details()
         self.collapsed = not self.collapsed
         if self.collapsed:
             self.body.pack_forget()
@@ -1122,6 +1260,7 @@ class UsageWidget:
     def toggle_layout(self) -> None:
         # A troca de aparência não inicia uma consulta: reaproveita o último
         # resultado recebido, inclusive enquanto uma atualização está em curso.
+        self._hide_hover_details()
         status_text, status_color = self.status.cget("text"), self.status.cget("fg")
         updated_text = self.last_updated.cget("text")
         self.layout = "compact" if self.layout == "cards" else "cards"
@@ -1160,6 +1299,7 @@ class UsageWidget:
     def rescan_integrations(self) -> None:
         if self.refreshing:
             return
+        self._hide_hover_details()
         self._close_clients()
         self._discover_profiles()
         for child in self.body.winfo_children():
@@ -1194,7 +1334,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.8",
+            "versao": "0.1.12",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [
@@ -1265,7 +1405,10 @@ class UsageWidget:
                     self.warnings[profile["id"]] = message
                 elif kind == "done":
                     self.refreshing = False
-                    self.last_updated.configure(text=f"Última atualização: {dt.datetime.now():%H:%M}")
+                    self.last_refresh_text = f"Última atualização: {dt.datetime.now():%H:%M}"
+                    self.last_updated.configure(text=self.last_refresh_text)
+                    if self.hover_updated and self.hover_updated.winfo_exists():
+                        self.hover_updated.configure(text=self.last_refresh_text)
                     warnings = [warning for warning in self.warnings.values() if warning]
                     if warnings:
                         self.status.configure(text=" · ".join(warnings), fg=YELLOW)
@@ -1287,8 +1430,20 @@ class UsageWidget:
     ) -> None:
         short, week = self.meters[profile["id"]]
         if self.layout == "compact":
-            data = first or second
+            if first and first.get("usedPercent") is not None:
+                data, window = first, "5 HORAS"
+            elif second:
+                data, window = second, "SEMANA"
+            else:
+                data, window = first, "5 HORAS"
             self._update_meter(short, data)
+            self.compact_details[profile["id"]] = {
+                "window": window,
+                "percent": remaining((data or {}).get("usedPercent")),
+                "resetsAt": (data or {}).get("resetsAt"),
+            }
+            if self.hover_meter is short and self.hover_panel and self.hover_panel.winfo_manager():
+                self._show_hover_details(profile, short)
             return
         self._update_meter(short, first)
         if week:
@@ -1297,10 +1452,15 @@ class UsageWidget:
     def _render_profile_error(self, profile: dict[str, Any], message: str) -> None:
         short, week = self.meters[profile["id"]]
         short.set_error(message)
+        if self.layout == "compact":
+            self.compact_details[profile["id"]] = {"window": "LIMITE", "percent": None, "message": message, "error": True}
+            if self.hover_meter is short and self.hover_panel and self.hover_panel.winfo_manager():
+                self._show_hover_details(profile, short)
         if week:
             week.set_error(f"{profile['label']} indisponível")
 
     def close(self) -> None:
+        self._hide_hover_details()
         self._save_position()
         self._close_clients()
         self.root.destroy()

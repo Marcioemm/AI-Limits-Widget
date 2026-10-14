@@ -76,7 +76,7 @@ botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
    .\scripts\stop.ps1
    ```
 
-O widget pode ser arrastado pela barra superior, lembra sua posição e possui
+O widget pode ser arrastado pela barra superior e possui
 botões para atualizar/verificar novamente, abrir configurações, copiar um
 diagnóstico seguro, fixar, recolher e encerrar.
 
@@ -86,6 +86,9 @@ computador. No modo compacto, cada perfil aparece como uma bateria com o
 percentual dentro; são exibidas até duas baterias por linha. Ela representa a
 janela de 5 horas e, quando essa janela não é fornecida pela CLI, representa a
 janela semanal. O modo compacto não mostra rodapé ou horário de atualização.
+Deixe o cursor por um segundo sobre uma bateria para expandir o widget e ver
+rapidamente o perfil, a janela acompanhada, a renovação e a última atualização,
+sem fazer uma nova consulta.
 
 O widget sempre inicia no monitor principal. Ele pode ser movido livremente
 durante o uso, mas volta ao monitor principal na próxima abertura.
