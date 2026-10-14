@@ -80,6 +80,12 @@ O widget pode ser arrastado pela barra superior, lembra sua posição e possui
 botões para atualizar/verificar novamente, abrir configurações, copiar um
 diagnóstico seguro, fixar, recolher e encerrar.
 
+Use o botão de layout (`▤`/`▥`) ao lado do título **LIMITES DE IA** para
+alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
+computador. No modo compacto, cada perfil ocupa uma faixa horizontal sem
+rodapé: ele mostra a janela de 5 horas e, quando ela não é fornecida pela CLI,
+mostra a janela semanal.
+
 ### Configuração por script (opcional)
 
 Para automatizar a instalação, passe as opções diretamente:
