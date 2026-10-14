@@ -33,6 +33,24 @@ Instale apenas as integrações que você pretende usar. Se uma CLI não estiver
 instalada ou autenticada, o widget continuará funcionando e mostrará o motivo
 na respectiva seção.
 
+## Instalação pelo instalador
+
+Baixe `AI-Limits-Widget-Setup-<versão>.exe` na página de
+[Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases), execute-o e
+opte pelo atalho na Área de Trabalho se desejar. O instalador inclui o runtime
+necessário para o widget; Python não é necessário para usá-lo.
+
+O Codex CLI e o Claude Code continuam opcionais e precisam estar instalados e
+autenticados na mesma conta do Windows para que seus limites apareçam. O
+instalador não copia nem solicita credenciais.
+
+O aplicativo desktop do Codex, por si só, não fornece a integração local usada
+pelo widget: instale também o [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
+para monitorar seus limites. Para Claude, siga a instalação oficial do
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started).
+Se nenhuma CLI estiver disponível, o widget mostra os links de instalação e o
+botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
+
 ## Instalação pelo código-fonte
 
 1. Clone o repositório:
@@ -42,34 +60,27 @@ na respectiva seção.
    cd ai-limits-widget
    ```
 
-2. Execute a configuração guiada:
-
-   ```powershell
-   .\scripts\setup.ps1
-   ```
-
-   Ela pergunta quais provedores serão usados, detecta os CLIs instalados,
-   permite informar um caminho alternativo, configura o intervalo de atualização
-   e pode criar um atalho na Área de Trabalho. Ao final, também permite cadastrar
-   perfis extras, como uma conta pessoal e outra de trabalho. Nenhuma credencial
-   é pedida ou salva.
-
-3. Inicie o widget:
+2. Inicie o widget:
 
    ```powershell
    .\scripts\start.ps1
    ```
 
-4. Para encerrar apenas este widget:
+   Abra **⚙ Configurações** no widget para escolher os provedores, alterar o
+   intervalo, indicar um executável fora do `PATH` e cadastrar perfis extras.
+   Nenhuma credencial é pedida ou salva.
+
+3. Para encerrar apenas este widget:
 
    ```powershell
    .\scripts\stop.ps1
    ```
 
 O widget pode ser arrastado pela barra superior, lembra sua posição e possui
-botões para atualizar, fixar, recolher e encerrar.
+botões para atualizar/verificar novamente, abrir configurações, copiar um
+diagnóstico seguro, fixar, recolher e encerrar.
 
-### Configuração sem perguntas
+### Configuração por script (opcional)
 
 Para automatizar a instalação, passe as opções diretamente:
 
@@ -126,6 +137,9 @@ horários de atualização.
 
 Antes de abrir uma issue, leia [SECURITY.md](SECURITY.md). Nunca envie arquivos
 de autenticação, tokens, logs completos ou capturas com informações privadas.
+O botão `?` do widget copia um diagnóstico que contém somente versões das CLIs,
+configuração de atualização e quais janelas foram disponibilizadas; não inclui
+tokens, IDs de conta ou caminhos locais.
 
 ## Diagnóstico
 
@@ -150,6 +164,7 @@ O projeto não usa dependências de terceiros. Para uma validação básica:
 
 ```powershell
 python -m compileall .\src
+python -m unittest discover -s .\tests -v
 python .\src\ai_limits_widget\app.py --once
 ```
 

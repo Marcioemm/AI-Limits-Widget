@@ -1,0 +1,7 @@
+{
+  "rateLimits": {
+    "planType": "plus",
+    "primary": {"usedPercent": 40, "resetsAt": 1800000000},
+    "secondary": {"usedPercent": 70, "resetsAt": 1800600000}
+  }
+}

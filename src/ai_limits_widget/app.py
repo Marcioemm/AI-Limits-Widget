@@ -13,8 +13,11 @@ import subprocess
 import threading
 import time
 import tkinter as tk
+import tkinter.filedialog as filedialog
+import tkinter.messagebox as messagebox
 import urllib.error
 import urllib.request
+import webbrowser
 from typing import Any
 
 
@@ -39,6 +42,8 @@ DEFAULT_CONFIG = {
     "executables": {"codex": None, "claude": None},
     "profiles": [],
 }
+CODEX_CLI_DOCS = "https://learn.chatgpt.com/docs/codex/cli"
+CLAUDE_CODE_DOCS = "https://docs.anthropic.com/en/docs/claude-code/getting-started"
 
 
 def load_config() -> dict[str, Any]:
@@ -115,16 +120,23 @@ def configured_executable(path: str | None, commands: tuple[str, ...]) -> str | 
 
 
 def profile_is_available(profile: dict[str, Any]) -> bool:
+    return profile_unavailable_reason(profile) is None
+
+
+def profile_unavailable_reason(profile: dict[str, Any]) -> str | None:
     provider = profile["provider"]
     executable = profile.get("executable")
     commands = ("codex.exe", "codex.cmd", "codex") if provider == "codex" else ("claude.exe", "claude.cmd", "claude")
     if not configured_executable(executable, commands):
-        return False
+        if provider == "codex":
+            return "Codex CLI não encontrado. Instale-o e entre com sua conta ChatGPT."
+        return "Claude Code não encontrado. Instale-o e entre com sua conta Anthropic."
     if provider == "claude":
         config_dir = profile.get("configDir") or os.environ.get("CLAUDE_CONFIG_DIR")
         credentials = (pathlib.Path(config_dir) / ".credentials.json") if config_dir else pathlib.Path.home() / ".claude" / ".credentials.json"
-        return credentials.is_file()
-    return True
+        if not credentials.is_file():
+            return 'Claude Code não autenticado. Execute "claude auth login" e abra o widget novamente.'
+    return None
 
 
 def clamp_percent(value: Any) -> int | None:
@@ -209,7 +221,7 @@ class CodexClient:
             None, ("codex.exe", "codex.cmd", "codex") if os.name == "nt" else ("codex",)
         )
         if not executable:
-            raise RuntimeError("Codex CLI não encontrado. Execute scripts\\setup.ps1 para configurá-lo.")
+            raise RuntimeError("Codex CLI não encontrado. Instale-o, entre com sua conta ChatGPT e abra o widget novamente.")
 
         startupinfo = None
         creationflags = 0
@@ -282,6 +294,61 @@ class CodexClient:
                 raise RuntimeError(message["error"].get("message", "Erro retornado pelo Codex."))
             return message.get("result")
 
+    @staticmethod
+    def _extract_rate_limits(response: dict[str, Any]) -> dict[str, Any]:
+        """Encontra as janelas de 5 horas e semanal sem supor primary/secondary.
+
+        O app-server pode expor mais de um limite e não garante que ``primary``
+        seja sempre a janela curta. A duração é a fonte de verdade para o rótulo.
+        """
+        groups: list[dict[str, Any]] = []
+        direct = response.get("rateLimits")
+        if isinstance(direct, dict):
+            groups.append(direct)
+        by_id = response.get("rateLimitsByLimitId")
+        if isinstance(by_id, dict):
+            groups.extend(item for item in by_id.values() if isinstance(item, dict))
+
+        plan = next((str(group["planType"]) for group in groups if group.get("planType")), "—")
+        windows: list[tuple[int, dict[str, Any]]] = []
+        seen: set[tuple[int, Any, Any]] = set()
+        for group in groups:
+            for key in ("primary", "secondary"):
+                window = group.get(key)
+                if not isinstance(window, dict):
+                    continue
+                try:
+                    duration = int(window.get("windowDurationMins"))
+                except (TypeError, ValueError):
+                    continue
+                identity = (duration, window.get("usedPercent"), window.get("resetsAt"))
+                if duration > 0 and identity not in seen:
+                    seen.add(identity)
+                    windows.append((duration, window))
+
+        five_hour = min(
+            (item for item in windows if item[0] <= 24 * 60),
+            key=lambda item: abs(item[0] - 5 * 60),
+            default=None,
+        )
+        seven_day = min(
+            (item for item in windows if item[0] > 24 * 60),
+            key=lambda item: abs(item[0] - 7 * 24 * 60),
+            default=None,
+        )
+
+        # Versões antigas não traziam windowDurationMins. Mantém a compatibilidade
+        # apenas quando não há qualquer duração para classificar.
+        if not windows and groups:
+            five_hour = (0, groups[0].get("primary")) if isinstance(groups[0].get("primary"), dict) else None
+            seven_day = (0, groups[0].get("secondary")) if isinstance(groups[0].get("secondary"), dict) else None
+
+        return {
+            "plan": plan,
+            "primary": five_hour[1] if five_hour else None,
+            "secondary": seven_day[1] if seven_day else None,
+        }
+
     def read_limits(self) -> dict[str, Any]:
         with self.lock:
             try:
@@ -290,14 +357,9 @@ class CodexClient:
                         if not self.process or self.process.poll() is not None:
                             self._start()
                         response = self._request("account/rateLimits/read", None)
-                        limits = response.get("rateLimits") or next(
-                            iter(response.get("rateLimitsByLimitId", {}).values()), {}
-                        )
-                        return {
-                            "plan": limits.get("planType") or "—",
-                            "primary": limits.get("primary"),
-                            "secondary": limits.get("secondary"),
-                        }
+                        if not isinstance(response, dict):
+                            raise RuntimeError("Resposta de limites do Codex inválida.")
+                        return self._extract_rate_limits(response)
                     except Exception:
                         self.close()
                         if attempt:
@@ -511,6 +573,13 @@ class Meter(tk.Frame):
         self.reset.configure(text=message, fg=RED)
         self._draw()
 
+    def set_unavailable(self, message: str) -> None:
+        """Mostra que a CLI respondeu, mas não publicou aquela janela."""
+        self.percent = None
+        self.value.configure(text="—")
+        self.reset.configure(text=message, fg=MUTED)
+        self._draw()
+
     def _draw(self) -> None:
         self.canvas.delete("all")
         width = max(24, self.canvas.winfo_width())
@@ -528,12 +597,187 @@ class Meter(tk.Frame):
             self.canvas.create_line(x, 3, x, height - 4, fill=PANEL, width=2)
 
 
+class SettingsDialog(tk.Toplevel):
+    """Configuração local. Nunca lê ou grava tokens, apenas caminhos e perfis."""
+
+    def __init__(self, widget: "UsageWidget") -> None:
+        super().__init__(widget.root)
+        self.widget = widget
+        self.config = load_config()
+        self.title("Configurações — Limites de IA")
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        self.transient(widget.root)
+        self.grab_set()
+
+        enabled = set(self.config["providers"])
+        self.provider_vars = {
+            "codex": tk.BooleanVar(value="codex" in enabled),
+            "claude": tk.BooleanVar(value="claude" in enabled),
+        }
+        self.path_vars = {
+            provider: tk.StringVar(value=self.config["executables"].get(provider) or "")
+            for provider in ("codex", "claude")
+        }
+        self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
+        self.extra_profiles = [
+            dict(item)
+            for item in self.config.get("profiles", [])
+            if isinstance(item, dict) and item.get("id") not in {"codex-default", "claude-default"}
+        ]
+        self._build()
+
+    def _label(self, master: tk.Misc, text: str) -> tk.Label:
+        label = tk.Label(master, text=text, bg=BG, fg=TEXT, font=("Segoe UI", 9))
+        label.pack(anchor="w", pady=(8, 2))
+        return label
+
+    def _build(self) -> None:
+        body = tk.Frame(self, bg=BG)
+        body.pack(fill="both", expand=True, padx=16, pady=12)
+        tk.Label(body, text="CONFIGURAÇÕES", bg=BG, fg=TEXT, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(
+            body,
+            text="Os caminhos são opcionais: em branco, o widget procura a CLI instalada no sistema.",
+            bg=BG, fg=MUTED, justify="left", wraplength=480, font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(3, 5))
+
+        providers = tk.Frame(body, bg=BG)
+        providers.pack(anchor="w")
+        tk.Checkbutton(providers, text="Codex CLI", variable=self.provider_vars["codex"], bg=BG, fg=TEXT,
+                       selectcolor=PANEL_2, activebackground=BG, activeforeground=TEXT).pack(side="left", padx=(0, 14))
+        tk.Checkbutton(providers, text="Claude Code", variable=self.provider_vars["claude"], bg=BG, fg=TEXT,
+                       selectcolor=PANEL_2, activebackground=BG, activeforeground=TEXT).pack(side="left")
+
+        for provider, title in (("codex", "Executável do Codex CLI"), ("claude", "Executável do Claude Code")):
+            self._label(body, title)
+            row = tk.Frame(body, bg=BG)
+            row.pack(fill="x")
+            tk.Entry(row, textvariable=self.path_vars[provider], width=51, bg=PANEL, fg=TEXT,
+                     insertbackground=TEXT, relief="flat").pack(side="left", ipady=4)
+            self._action_button(row, "Procurar…", lambda key=provider: self._choose_executable(key)).pack(side="left", padx=(6, 0))
+
+        self._label(body, "Intervalo de atualização (minutos, de 5 a 120)")
+        tk.Entry(body, textvariable=self.refresh_var, width=8, bg=PANEL, fg=TEXT, insertbackground=TEXT,
+                 relief="flat").pack(anchor="w", ipady=4)
+
+        self._label(body, "Perfis adicionais")
+        profile_row = tk.Frame(body, bg=BG)
+        profile_row.pack(fill="x")
+        self.profile_list = tk.Listbox(profile_row, height=4, width=53, bg=PANEL, fg=TEXT, selectbackground=LINE,
+                                       relief="flat", highlightthickness=0)
+        self.profile_list.pack(side="left", fill="x", expand=True)
+        side = tk.Frame(profile_row, bg=BG)
+        side.pack(side="left", padx=(6, 0))
+        self._action_button(side, "Adicionar", self._add_profile).pack(fill="x")
+        self._action_button(side, "Remover", self._remove_profile).pack(fill="x", pady=(5, 0))
+        self._refresh_profile_list()
+
+        actions = tk.Frame(body, bg=BG)
+        actions.pack(fill="x", pady=(14, 0))
+        self._action_button(actions, "Cancelar", self.destroy).pack(side="right")
+        self._action_button(actions, "Salvar e verificar", self._save).pack(side="right", padx=(0, 6))
+
+    @staticmethod
+    def _action_button(master: tk.Misc, text: str, command: Any) -> tk.Button:
+        return tk.Button(master, text=text, command=command, bg=PANEL_2, fg=TEXT, activebackground=LINE,
+                         activeforeground=TEXT, bd=0, padx=9, pady=4, font=("Segoe UI", 8), cursor="hand2")
+
+    def _choose_executable(self, provider: str) -> None:
+        filename = filedialog.askopenfilename(parent=self, title=f"Selecione o executável do {provider.title()}",
+                                              filetypes=[("Executáveis", "*.exe *.cmd"), ("Todos os arquivos", "*.*")])
+        if filename:
+            self.path_vars[provider].set(filename)
+
+    def _refresh_profile_list(self) -> None:
+        self.profile_list.delete(0, tk.END)
+        for profile in self.extra_profiles:
+            directory = profile.get("configDir") or "padrão"
+            self.profile_list.insert(tk.END, f"{profile.get('provider', 'codex').upper()} · {profile.get('label', 'Perfil')} · {directory}")
+
+    def _add_profile(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Adicionar perfil")
+        dialog.configure(bg=BG)
+        dialog.transient(self)
+        dialog.grab_set()
+        provider = tk.StringVar(value="codex")
+        label = tk.StringVar()
+        config_dir = tk.StringVar()
+        frame = tk.Frame(dialog, bg=BG)
+        frame.pack(padx=14, pady=12)
+        for text, variable in (("Provedor (codex ou claude)", provider), ("Nome do perfil", label), ("Pasta de configuração (opcional)", config_dir)):
+            tk.Label(frame, text=text, bg=BG, fg=TEXT, font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 2))
+            tk.Entry(frame, textvariable=variable, width=48, bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat").pack(ipady=4)
+
+        def choose_dir() -> None:
+            directory = filedialog.askdirectory(parent=dialog, title="Selecione a pasta de configuração")
+            if directory:
+                config_dir.set(directory)
+
+        self._action_button(frame, "Escolher pasta…", choose_dir).pack(anchor="w", pady=(5, 0))
+
+        def add() -> None:
+            provider_name = provider.get().strip().lower()
+            profile_label = label.get().strip()
+            if provider_name not in {"codex", "claude"} or not profile_label:
+                messagebox.showerror("Perfil", "Informe codex ou claude e um nome para o perfil.", parent=dialog)
+                return
+            safe_label = "".join(char if char.isalnum() else "-" for char in profile_label.lower()).strip("-") or "perfil"
+            self.extra_profiles.append({
+                "id": f"{provider_name}-{safe_label}-{len(self.extra_profiles) + 1}",
+                "provider": provider_name,
+                "label": profile_label[:40],
+                "executable": self.path_vars[provider_name].get().strip() or None,
+                "configDir": config_dir.get().strip() or None,
+            })
+            self._refresh_profile_list()
+            dialog.destroy()
+
+        self._action_button(frame, "Adicionar perfil", add).pack(anchor="e", pady=(12, 0))
+
+    def _remove_profile(self) -> None:
+        selection = self.profile_list.curselection()
+        if selection:
+            del self.extra_profiles[selection[0]]
+            self._refresh_profile_list()
+
+    def _save(self) -> None:
+        providers = [name for name, variable in self.provider_vars.items() if variable.get()]
+        if not providers:
+            messagebox.showerror("Configurações", "Selecione pelo menos um provedor.", parent=self)
+            return
+        try:
+            refresh_minutes = max(5, min(120, int(self.refresh_var.get())))
+        except ValueError:
+            messagebox.showerror("Configurações", "O intervalo deve ser um número entre 5 e 120.", parent=self)
+            return
+        executables = {provider: variable.get().strip() or None for provider, variable in self.path_vars.items()}
+        profiles = [
+            {"id": f"{provider}-default", "provider": provider, "label": "Padrão", "executable": executables[provider], "configDir": None}
+            for provider in providers
+        ]
+        profiles.extend(self.extra_profiles)
+        try:
+            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
+                                               "executables": executables, "profiles": profiles}, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)
+            return
+        self.widget.rescan_integrations()
+        self.destroy()
+
+
 class UsageWidget:
     def __init__(self) -> None:
-        self.config = load_config()
-        self.profiles = [profile for profile in load_profiles() if profile_is_available(profile)]
-        self.refresh_seconds = self.config["refreshMinutes"] * 60
-        # Reserva espaço para o rodapé com o horário da última atualização.
+        self.clients: dict[str, CodexClient | ClaudeClient] = {}
+        self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
+        self.last_claude_at: dict[str, float] = {}
+        self.warnings: dict[str, str | None] = {}
+        self.last_windows: dict[str, dict[str, int | None]] = {}
+        self.refresh_scheduled = False
+        self._discover_profiles()
         self.window_height = max(168, 114 + 142 * len(self.profiles))
         self.root = tk.Tk()
         self.root.title("Limites de IA")
@@ -542,29 +786,55 @@ class UsageWidget:
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", 0.97)
         self.root.resizable(False, False)
-        self.clients: dict[str, CodexClient | ClaudeClient] = {}
-        for profile in self.profiles:
-            if profile["provider"] == "codex":
-                self.clients[profile["id"]] = CodexClient(profile["executable"], profile["configDir"])
-            else:
-                self.clients[profile["id"]] = ClaudeClient(profile["executable"], profile["configDir"], profile["id"])
-        self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.refreshing = False
         self.collapsed = False
         self.topmost = True
         self.drag_origin = (0, 0)
-        self.last_claude_at: dict[str, float] = {}
-        self.warnings: dict[str, str | None] = {profile["id"]: None for profile in self.profiles}
         self._place_window()
         self._build()
         # A quantidade de cartões e as métricas de fonte do Windows variam.
         # Mede o layout pronto para que o rodapé nunca seja cortado.
         self.root.update_idletasks()
-        self.window_height = max(self.window_height, self.root.winfo_reqheight())
-        self._place_window()
+        self._resize_to_content()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(100, self._drain_events)
-        self.root.after(250, lambda: self.refresh(force_claude=True))
+        if self.profiles:
+            self.root.after(250, lambda: self.refresh(force_claude=True))
+            self._schedule_refresh()
+
+    def _discover_profiles(self) -> None:
+        self.config = load_config()
+        self.configured_profiles = load_profiles()
+        self.unavailable_profiles = [
+            (profile, reason) for profile in self.configured_profiles if (reason := profile_unavailable_reason(profile))
+        ]
+        self.profiles = [profile for profile in self.configured_profiles if profile_is_available(profile)]
+        self.refresh_seconds = self.config["refreshMinutes"] * 60
+        self.clients = {}
+        for profile in self.profiles:
+            if profile["provider"] == "codex":
+                self.clients[profile["id"]] = CodexClient(profile["executable"], profile["configDir"])
+            else:
+                self.clients[profile["id"]] = ClaudeClient(profile["executable"], profile["configDir"], profile["id"])
+        self.last_claude_at = {}
+        self.warnings = {profile["id"]: None for profile in self.profiles}
+        self.last_windows = {}
+
+    def _close_clients(self) -> None:
+        for client in self.clients.values():
+            if isinstance(client, CodexClient):
+                client.close()
+
+    def _resize_to_content(self) -> None:
+        self.root.update_idletasks()
+        self.window_height = max(168, self.root.winfo_reqheight())
+        if not self.collapsed:
+            self._place_window()
+
+    def _schedule_refresh(self) -> None:
+        if self.refresh_scheduled:
+            return
+        self.refresh_scheduled = True
         self.root.after(self.refresh_seconds * 1000, self._scheduled_refresh)
 
     @property
@@ -597,7 +867,9 @@ class UsageWidget:
         self.pin_button = self._button(titlebar, "●", self.toggle_topmost)
         self.pin_button.configure(fg=ORANGE)
         self.pin_button.pack(side="right")
-        self._button(titlebar, "↻", lambda: self.refresh(force_claude=True)).pack(side="right")
+        self._button(titlebar, "⚙", self.open_settings).pack(side="right")
+        self._button(titlebar, "?", self.copy_diagnostics).pack(side="right")
+        self._button(titlebar, "↻", self.refresh_or_rescan).pack(side="right")
         for widget in (titlebar, label):
             widget.bind("<ButtonPress-1>", self._start_drag)
             widget.bind("<B1-Motion>", self._drag)
@@ -605,16 +877,31 @@ class UsageWidget:
 
         self.body = tk.Frame(self.root, bg=BG)
         self.body.pack(fill="both", expand=True, padx=12, pady=(6, 10))
+        self._build_body()
+
+    def _build_body(self) -> None:
         self.meters: dict[str, tuple[Meter, Meter]] = {}
         if not self.profiles:
+            instructions = "Para acompanhar seus limites, instale e autentique pelo menos uma CLI:\n\n"
+            instructions += "\n".join(f"• {reason}" for _, reason in self.unavailable_profiles)
+            instructions += "\n\nDepois de instalar ou entrar, use Verificar novamente."
             tk.Label(
                 self.body,
-                text="Nenhuma conta local encontrada.\nExecute scripts\\setup.ps1 para adicionar um perfil.",
+                text=instructions,
                 bg=BG,
-                fg=MUTED,
+                fg=YELLOW,
                 justify="left",
                 font=("Segoe UI", 9),
+                wraplength=WINDOW_WIDTH - 40,
             ).pack(anchor="w", pady=16)
+            missing = {profile["provider"] for profile, _ in self.unavailable_profiles}
+            actions = tk.Frame(self.body, bg=BG)
+            actions.pack(anchor="w", pady=(0, 5))
+            if "codex" in missing:
+                self._action_button(actions, "Instalar Codex CLI", lambda: webbrowser.open(CODEX_CLI_DOCS)).pack(side="left")
+            if "claude" in missing:
+                self._action_button(actions, "Instalar Claude Code", lambda: webbrowser.open(CLAUDE_CODE_DOCS)).pack(side="left", padx=(6, 0))
+            self._action_button(self.body, "Verificar novamente", self.rescan_integrations).pack(anchor="w", pady=(2, 0))
         for profile in self.profiles:
             accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
             company = "OPENAI" if profile["provider"] == "codex" else "ANTHROPIC"
@@ -630,7 +917,9 @@ class UsageWidget:
             week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
             self.meters[profile["id"]] = (short, week)
 
-        self.status = tk.Label(self.body, text="Conectando…", bg=BG, fg=MUTED, font=("Segoe UI", 8), anchor="w")
+        status_text = "Conectando…" if self.profiles else "Aguardando uma CLI disponível"
+        status_color = MUTED if self.profiles else YELLOW
+        self.status = tk.Label(self.body, text=status_text, bg=BG, fg=status_color, font=("Segoe UI", 8), anchor="w")
         self.status.pack(fill="x", pady=(12, 0))
         self.last_updated = tk.Label(
             self.body,
@@ -641,6 +930,12 @@ class UsageWidget:
             anchor="w",
         )
         self.last_updated.pack(fill="x", pady=(2, 0))
+
+    def _action_button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
+        return tk.Button(
+            master, text=text, command=command, bg=PANEL_2, fg=TEXT, activebackground=LINE, activeforeground=TEXT,
+            bd=0, padx=9, pady=4, font=("Segoe UI", 8), cursor="hand2"
+        )
 
     def _button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
         return tk.Button(
@@ -694,10 +989,74 @@ class UsageWidget:
         self.pin_button.configure(fg=ORANGE if self.topmost else MUTED)
 
     def _scheduled_refresh(self) -> None:
+        self.refresh_scheduled = False
         self.refresh(force_claude=False)
-        self.root.after(self.refresh_seconds * 1000, self._scheduled_refresh)
+        self._schedule_refresh()
+
+    def refresh_or_rescan(self) -> None:
+        # Permite terminar uma instalação ou login sem reiniciar o aplicativo.
+        if self.unavailable_profiles or not self.profiles:
+            self.rescan_integrations()
+        else:
+            self.refresh(force_claude=True)
+
+    def rescan_integrations(self) -> None:
+        if self.refreshing:
+            return
+        self._close_clients()
+        self._discover_profiles()
+        for child in self.body.winfo_children():
+            child.destroy()
+        self._build_body()
+        self._resize_to_content()
+        if self.profiles:
+            self._schedule_refresh()
+            self.refresh(force_claude=True)
+
+    def open_settings(self) -> None:
+        SettingsDialog(self)
+
+    def copy_diagnostics(self) -> None:
+        """Copia informações úteis de suporte, deliberadamente sem IDs ou credenciais."""
+        cli: dict[str, dict[str, Any]] = {}
+        for provider, commands in {
+            "codex": ("codex.exe", "codex.cmd", "codex"),
+            "claude": ("claude.exe", "claude.cmd", "claude"),
+        }.items():
+            executable = configured_executable(self.config["executables"].get(provider), commands)
+            info: dict[str, Any] = {"encontrado": bool(executable)}
+            if executable:
+                try:
+                    result = subprocess.run([executable, "--version"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", timeout=5,
+                                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                    output = (result.stdout or result.stderr).strip().splitlines()
+                    info["versao"] = output[0][:160] if output and result.returncode == 0 else "não informada"
+                except (OSError, subprocess.SubprocessError):
+                    info["versao"] = "não informada"
+            cli[provider] = info
+        report = {
+            "aplicativo": "AI Limits Widget",
+            "versao": "0.1.3",
+            "atualizacaoMinutos": self.config["refreshMinutes"],
+            "cli": cli,
+            "perfis": [
+                {
+                    "provedor": profile["provider"], "disponivel": profile_is_available(profile),
+                    "janelasMinutos": self.last_windows.get(profile["id"], {}),
+                    "teveAviso": bool(self.warnings.get(profile["id"])),
+                }
+                for profile in self.configured_profiles
+            ],
+        }
+        self.root.clipboard_clear()
+        self.root.clipboard_append(json.dumps(report, ensure_ascii=False, indent=2))
+        self.status.configure(text="Diagnóstico seguro copiado", fg=MUTED)
 
     def refresh(self, force_claude: bool = False) -> None:
+        if not self.profiles:
+            self.status.configure(text="Instale e autentique uma CLI; depois, use Verificar novamente.", fg=YELLOW)
+            return
         if self.refreshing:
             return
         self.refreshing = True
@@ -731,6 +1090,10 @@ class UsageWidget:
                     second = data.get("secondary") if profile["provider"] == "codex" else data.get("seven_day")
                     self._update_meter(short, first)
                     self._update_meter(week, second)
+                    self.last_windows[profile["id"]] = {
+                        "cincoHoras": (first or {}).get("windowDurationMins"),
+                        "semana": (second or {}).get("windowDurationMins"),
+                    }
                     if profile["provider"] == "claude" and data.get("stale"):
                         fetched = dt.datetime.fromtimestamp(data.get("fetchedAt", 0)).strftime("%H:%M")
                         retry = dt.datetime.fromtimestamp(data.get("nextRetryAt", 0)).strftime("%H:%M")
@@ -757,16 +1120,14 @@ class UsageWidget:
 
     @staticmethod
     def _update_meter(meter: Meter, data: dict[str, Any] | None) -> None:
-        if data:
+        if data and data.get("usedPercent") is not None:
             meter.set_data(data.get("usedPercent"), data.get("resetsAt"))
         else:
-            meter.set_error("Limite indisponível")
+            meter.set_unavailable("Não informado pela CLI")
 
     def close(self) -> None:
         self._save_position()
-        for client in self.clients.values():
-            if isinstance(client, CodexClient):
-                client.close()
+        self._close_clients()
         self.root.destroy()
 
     def run(self) -> None:
@@ -776,7 +1137,7 @@ class UsageWidget:
 def print_once() -> None:
     profiles = [profile for profile in load_profiles() if profile_is_available(profile)]
     if not profiles:
-        raise RuntimeError("Nenhum provedor foi configurado. Execute scripts\\setup.ps1.")
+        raise RuntimeError("Nenhuma CLI disponível. Instale e autentique o Codex CLI ou o Claude Code.")
     try:
         output: dict[str, Any] = {}
         for profile in profiles:
