@@ -242,6 +242,21 @@ def virtual_screen_bounds(root: tk.Misc) -> tuple[int, int, int, int]:
     return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
 
 
+def primary_work_area(root: tk.Misc) -> tuple[int, int, int, int]:
+    """Retorna a área útil do monitor principal, sem a barra de tarefas."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            import ctypes.wintypes
+
+            rect = ctypes.wintypes.RECT()
+            if ctypes.windll.user32.SystemParametersInfoW(48, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+                return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+        except (AttributeError, OSError):
+            pass
+    return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
+
+
 def fit_to_bounds(x: int, y: int, bounds: tuple[int, int, int, int]) -> tuple[int, int]:
     """Desloca a janela para dentro da área visível, preservando a posição quando possível."""
     left, top, width, height = bounds
@@ -658,48 +673,52 @@ class Meter(tk.Frame):
             self.canvas.create_line(x, 3, x, height - 4, fill=PANEL, width=2)
 
 
-class CompactMeter(tk.Frame):
-    """Uma faixa horizontal de limite para o modo compacto."""
+class BatteryMeter(tk.Canvas):
+    """Medidor minimalista no formato de bateria para o modo compacto."""
 
-    def __init__(self, master: tk.Misc, title: str, accent: str) -> None:
-        super().__init__(master, bg=PANEL)
+    def __init__(self, master: tk.Misc, accent: str) -> None:
+        super().__init__(master, height=68, bg=BG, highlightthickness=0, cursor="hand2")
         self.accent = accent
-        self.columnconfigure(0, weight=1)
-        self.title = tk.Label(self, text=title.upper(), bg=PANEL, fg=accent, font=("Segoe UI", 8, "bold"))
-        self.title.grid(row=0, column=0, sticky="w", padx=(11, 8), pady=(8, 1))
-        self.value = tk.Label(self, text="—", bg=PANEL, fg=TEXT, font=("Segoe UI", 17, "bold"))
-        self.value.grid(row=0, column=1, sticky="e", padx=(0, 11), pady=(5, 0))
-        self.canvas = tk.Canvas(self, height=5, bg=PANEL, highlightthickness=0)
-        self.canvas.grid(row=1, column=0, columnspan=2, sticky="ew", padx=11, pady=(1, 8))
         self.percent: int | None = None
-        self.canvas.bind("<Configure>", lambda _event: self._draw())
+        self.error = False
+        self.bind("<Configure>", lambda _event: self._draw())
 
-    def set_title(self, title: str) -> None:
-        self.title.configure(text=title.upper())
-
-    def set_data(self, used: Any, resets_at: Any) -> None:
+    def set_data(self, used: Any, _resets_at: Any) -> None:
         self.percent = remaining(used)
-        self.value.configure(text="—" if self.percent is None else f"{self.percent}%")
+        self.error = False
         self._draw()
 
-    def set_error(self, message: str) -> None:
+    def set_error(self, _message: str) -> None:
         self.percent = None
-        self.value.configure(text="—")
+        self.error = True
         self._draw()
 
-    def set_unavailable(self, message: str) -> None:
+    def set_unavailable(self, _message: str) -> None:
         self.percent = None
-        self.value.configure(text="—")
+        self.error = False
         self._draw()
 
     def _draw(self) -> None:
-        self.canvas.delete("all")
-        width = max(8, self.canvas.winfo_width())
-        self.canvas.create_rectangle(0, 0, width, 5, fill=LINE, outline="")
-        if self.percent is None:
-            return
-        color = RED if self.percent < 15 else YELLOW if self.percent < 35 else self.accent
-        self.canvas.create_rectangle(0, 0, width * self.percent / 100, 5, fill=color, outline="")
+        self.delete("all")
+        width = max(72, self.winfo_width())
+        height = max(46, self.winfo_height())
+        terminal_width = max(7, width // 14)
+        left, top = 3, 8
+        right, bottom = width - terminal_width - 5, height - 8
+        outline = RED if self.error else self.accent
+        self.create_rectangle(left, top, right, bottom, outline=outline, width=2)
+        terminal_top = top + (bottom - top) * 0.30
+        terminal_bottom = bottom - (bottom - top) * 0.30
+        self.create_rectangle(right + 2, terminal_top, width - 2, terminal_bottom, fill=outline, outline=outline)
+
+        label = "—" if self.percent is None else f"{self.percent}%"
+        if self.percent is not None:
+            color = RED if self.percent < 15 else YELLOW if self.percent < 35 else self.accent
+            inner_left, inner_top, inner_right, inner_bottom = left + 4, top + 4, right - 4, bottom - 4
+            fill_right = inner_left + (inner_right - inner_left) * self.percent / 100
+            self.create_rectangle(inner_left, inner_top, fill_right, inner_bottom, fill=color, outline="")
+        self.create_text((left + right) / 2, (top + bottom) / 2, text=label, fill=TEXT,
+                         font=("Segoe UI", 16, "bold"))
 
 
 class SettingsDialog(tk.Toplevel):
@@ -886,7 +905,7 @@ class UsageWidget:
         self.last_meter_errors: dict[str, str] = {}
         self.refresh_scheduled = False
         self._discover_profiles()
-        self.window_height = max(168, 114 + 142 * len(self.profiles))
+        self.window_height = max(102 if self.layout == "compact" else 168, 114 + 142 * len(self.profiles))
         self.root = tk.Tk()
         self.root.title("Limites de IA")
         self.root.configure(bg=BG)
@@ -938,9 +957,10 @@ class UsageWidget:
 
     def _resize_to_content(self) -> None:
         self.root.update_idletasks()
-        self.window_height = max(168, self.root.winfo_reqheight())
+        minimum_height = 102 if self.layout == "compact" else 168
+        self.window_height = max(minimum_height, self.root.winfo_reqheight())
         if not self.collapsed:
-            self._place_window()
+            self.root.geometry(f"{WINDOW_WIDTH}x{self.window_height}+{self.root.winfo_x()}+{self.root.winfo_y()}")
 
     def _schedule_refresh(self) -> None:
         if self.refresh_scheduled:
@@ -948,23 +968,9 @@ class UsageWidget:
         self.refresh_scheduled = True
         self.root.after(self.refresh_seconds * 1000, self._scheduled_refresh)
 
-    @property
-    def settings_file(self) -> pathlib.Path:
-        return APP_DATA_DIR / "settings.json"
-
     def _place_window(self) -> None:
-        default = (self.root.winfo_screenwidth() - WINDOW_WIDTH - 24, 70)
-        x, y = default
-        try:
-            data = json.loads(self.settings_file.read_text(encoding="utf-8"))
-            x, y = int(data.get("x", x)), int(data.get("y", y))
-        except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
-            pass
-        # Uma posição salva em um monitor desconectado ou após mudança de
-        # resolução deixaria a janela sem borda invisível e fora da barra de tarefas.
-        x, y = fit_to_bounds(x, y, virtual_screen_bounds(self.root))
-        if not is_on_monitor(x, y):
-            x, y = default
+        left, top, width, _height = primary_work_area(self.root)
+        x, y = left + max(12, width - WINDOW_WIDTH - 24), top + 70
         self.root.geometry(f"{WINDOW_WIDTH}x{self.window_height}+{x}+{y}")
 
     def _build(self) -> None:
@@ -993,8 +999,7 @@ class UsageWidget:
         self._build_body()
 
     def _build_body(self) -> None:
-        self.meters: dict[str, tuple[Meter | CompactMeter, Meter | CompactMeter | None]] = {}
-        self.compact_headings: dict[str, str] = {}
+        self.meters: dict[str, tuple[Meter | BatteryMeter, Meter | BatteryMeter | None]] = {}
         if not self.profiles:
             instructions = "Para acompanhar seus limites, instale e autentique pelo menos uma CLI:\n\n"
             instructions += "\n".join(f"• {reason}" for _, reason in self.unavailable_profiles)
@@ -1016,16 +1021,22 @@ class UsageWidget:
             if "claude" in missing:
                 self._action_button(actions, "Instalar Claude Code", lambda: webbrowser.open(CLAUDE_CODE_DOCS)).pack(side="left", padx=(6, 0))
             self._action_button(self.body, "Verificar novamente", self.rescan_integrations).pack(anchor="w", pady=(2, 0))
-        for profile in self.profiles:
+        compact_grid: tk.Frame | None = None
+        if self.layout == "compact" and self.profiles:
+            compact_grid = tk.Frame(self.body, bg=BG)
+            compact_grid.pack(fill="x", pady=(4, 0))
+            compact_grid.columnconfigure(0, weight=1, uniform="batteries")
+            compact_grid.columnconfigure(1, weight=1, uniform="batteries")
+
+        for index, profile in enumerate(self.profiles):
             accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
             company = "OPENAI" if profile["provider"] == "codex" else "ANTHROPIC"
             title = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
             if self.layout == "compact":
-                heading = f"{title} · {profile['label']}"
-                self.compact_headings[profile["id"]] = heading
-                short = CompactMeter(self.body, f"{heading} · 5 horas", accent)
-                short.configure(highlightbackground=accent, highlightthickness=1)
-                short.pack(fill="x", pady=(7, 0))
+                assert compact_grid is not None
+                short = BatteryMeter(compact_grid, accent)
+                column = index % 2
+                short.grid(row=index // 2, column=column, sticky="ew", padx=(0, 5) if column == 0 else (5, 0), pady=(0, 8))
                 week = None
             else:
                 self._provider_title(f"{title} · {profile['label'].upper()}", company, accent)
@@ -1090,13 +1101,9 @@ class UsageWidget:
         self.root.geometry(f"+{event.x_root - self.drag_origin[0]}+{event.y_root - self.drag_origin[1]}")
 
     def _save_position(self, _event: tk.Event | None = None) -> None:
-        try:
-            self.settings_file.parent.mkdir(parents=True, exist_ok=True)
-            self.settings_file.write_text(
-                json.dumps({"x": self.root.winfo_x(), "y": self.root.winfo_y()}), encoding="utf-8"
-            )
-        except OSError:
-            pass
+        # A posição vale durante esta execução. Na próxima abertura, o widget
+        # volta ao monitor principal para nunca iniciar fora da tela.
+        return
 
     def toggle_collapse(self) -> None:
         self.collapsed = not self.collapsed
@@ -1269,7 +1276,7 @@ class UsageWidget:
         self.root.after(100, self._drain_events)
 
     @staticmethod
-    def _update_meter(meter: Meter | CompactMeter, data: dict[str, Any] | None) -> None:
+    def _update_meter(meter: Meter | BatteryMeter, data: dict[str, Any] | None) -> None:
         if data and data.get("usedPercent") is not None:
             meter.set_data(data.get("usedPercent"), data.get("resetsAt"))
         else:
@@ -1281,10 +1288,6 @@ class UsageWidget:
         short, week = self.meters[profile["id"]]
         if self.layout == "compact":
             data = first or second
-            period = "5 horas" if first else "Semana"
-            heading = self.compact_headings[profile["id"]]
-            if isinstance(short, CompactMeter):
-                short.set_title(f"{heading} · {period}")
             self._update_meter(short, data)
             return
         self._update_meter(short, first)

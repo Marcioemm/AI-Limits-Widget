@@ -82,9 +82,13 @@ diagnóstico seguro, fixar, recolher e encerrar.
 
 Use o botão de layout (`▤`/`▥`) ao lado do título **LIMITES DE IA** para
 alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
-computador. No modo compacto, cada perfil ocupa uma faixa horizontal sem
-rodapé: ele mostra a janela de 5 horas e, quando ela não é fornecida pela CLI,
-mostra a janela semanal.
+computador. No modo compacto, cada perfil aparece como uma bateria com o
+percentual dentro; são exibidas até duas baterias por linha. Ela representa a
+janela de 5 horas e, quando essa janela não é fornecida pela CLI, representa a
+janela semanal. O modo compacto não mostra rodapé ou horário de atualização.
+
+O widget sempre inicia no monitor principal. Ele pode ser movido livremente
+durante o uso, mas volta ao monitor principal na próxima abertura.
 
 ### Configuração por script (opcional)
 
