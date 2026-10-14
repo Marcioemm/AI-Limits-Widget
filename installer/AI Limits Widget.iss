@@ -7,7 +7,7 @@
 #endif
 
 #define MyAppName "AI Limits Widget"
-#define MyAppPublisher "AI Limits Widget contributors"
+#define MyAppPublisher "Marcio Emmanuel"
 #define MyAppURL "https://github.com/Marcioemm/AI-Limits-Widget"
 #define MyAppExeName "AI Limits Widget.exe"
 
@@ -41,6 +41,9 @@ Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDesc
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

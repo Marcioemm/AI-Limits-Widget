@@ -1187,7 +1187,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.7",
+            "versao": "0.1.8",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [

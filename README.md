@@ -174,9 +174,12 @@ python -m unittest discover -s .\tests -v
 python .\src\ai_limits_widget\app.py --once
 ```
 
-Contribuições são bem-vindas; veja [CONTRIBUTING.md](CONTRIBUTING.md).
+Contribuições são bem-vindas. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para o
+fluxo por fork e pull request e use `git commit -s` para assinar os commits
+conforme o [DCO](DCO.md).
 
 ## Licença
 
-Distribuído sob a [licença MIT](LICENSE).
+Copyright © 2026 Marcio Emmanuel. Distribuído sob a [licença MIT](LICENSE).
+Consulte também os [avisos de componentes de terceiros](THIRD_PARTY_NOTICES.md).
 
