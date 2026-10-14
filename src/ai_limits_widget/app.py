@@ -723,8 +723,79 @@ class BatteryMeter(tk.Canvas):
             inner_left, inner_top, inner_right, inner_bottom = left + 4, top + 4, right - 4, bottom - 4
             fill_right = inner_left + (inner_right - inner_left) * self.percent / 100
             self.create_rectangle(inner_left, inner_top, fill_right, inner_bottom, fill=color, outline="")
+            # Quatro células, como a barra do modo de cartões. As divisões
+            # ficam visíveis somente sobre a parte carregada da bateria.
+            for fraction in (0.25, 0.5, 0.75):
+                x = inner_left + (inner_right - inner_left) * fraction
+                self.create_line(x, inner_top, x, inner_bottom, fill=BG, width=3)
         self.create_text((left + right) / 2, (top + bottom) / 2, text=label, fill=TEXT,
                          font=("Segoe UI", 16, "bold"))
+
+
+class HoverTooltip:
+    """Balão curto para explicar os ícones da barra superior."""
+
+    def __init__(self, widget: tk.Misc, text: str, delay_ms: int = 550) -> None:
+        self.widget = widget
+        self.text = text
+        self.delay_ms = delay_ms
+        self.after_id: str | None = None
+        self.window: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Destroy>", self._hide, add="+")
+
+    def set_text(self, text: str) -> None:
+        self.text = text
+        if self.window:
+            self._hide()
+
+    def _schedule(self, _event: tk.Event | None = None) -> None:
+        self._cancel_timer()
+        self.after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _cancel_timer(self) -> None:
+        if self.after_id:
+            try:
+                self.widget.after_cancel(self.after_id)
+            except tk.TclError:
+                pass
+            self.after_id = None
+
+    def _show(self) -> None:
+        self.after_id = None
+        if not self.widget.winfo_exists() or self.window:
+            return
+        tip = tk.Toplevel(self.widget)
+        self.window = tip
+        tip.withdraw()
+        tip.overrideredirect(True)
+        tip.attributes("-topmost", True)
+        label = tk.Label(
+            tip, text=self.text, bg="#292d25", fg=TEXT, bd=1, relief="solid",
+            padx=7, pady=4, font=("Segoe UI", 8),
+        )
+        label.pack()
+        tip.update_idletasks()
+        left, top, width, height = virtual_screen_bounds(self.widget)
+        tip_width, tip_height = tip.winfo_reqwidth(), tip.winfo_reqheight()
+        x = self.widget.winfo_rootx() + (self.widget.winfo_width() - tip_width) // 2
+        x = max(left + 4, min(x, left + width - tip_width - 4))
+        below = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        y = below if below + tip_height <= top + height - 4 else self.widget.winfo_rooty() - tip_height - 6
+        tip.geometry(f"+{x}+{max(top + 4, y)}")
+        tip.deiconify()
+        tip.lift()
+
+    def _hide(self, _event: tk.Event | None = None) -> None:
+        self._cancel_timer()
+        if self.window:
+            try:
+                self.window.destroy()
+            except tk.TclError:
+                pass
+            self.window = None
 
 
 class SettingsDialog(tk.Toplevel):
@@ -934,6 +1005,7 @@ class UsageWidget:
         self.hover_value: tk.Label | None = None
         self.hover_reset: tk.Label | None = None
         self.hover_updated: tk.Label | None = None
+        self.button_tooltips: dict[tk.Button, HoverTooltip] = {}
         self._place_window()
         self._build()
         # A quantidade de cartões e as métricas de fonte do Windows variam.
@@ -997,16 +1069,20 @@ class UsageWidget:
         titlebar.pack_propagate(False)
         label = tk.Label(titlebar, text="LIMITES DE IA", bg=PANEL_2, fg=TEXT, font=("Segoe UI", 10, "bold"))
         label.pack(side="left", padx=12)
-        self._button(titlebar, "×", self.close).pack(side="right", padx=(0, 5))
-        self._button(titlebar, "–", self.toggle_collapse).pack(side="right")
-        self.pin_button = self._button(titlebar, "●", self.toggle_topmost)
+        self._button(titlebar, "×", self.close, "Fechar").pack(side="right", padx=(0, 5))
+        self.collapse_button = self._button(titlebar, "–", self.toggle_collapse, "Recolher")
+        self.collapse_button.pack(side="right")
+        self.pin_button = self._button(titlebar, "●", self.toggle_topmost, "Desafixar da frente")
         self.pin_button.configure(fg=ORANGE)
         self.pin_button.pack(side="right")
-        self.layout_button = self._button(titlebar, "▤" if self.layout == "cards" else "▥", self.toggle_layout)
+        layout_hint = "Usar modo compacto" if self.layout == "cards" else "Usar modo cartões"
+        self.layout_button = self._button(
+            titlebar, "▤" if self.layout == "cards" else "▥", self.toggle_layout, layout_hint
+        )
         self.layout_button.pack(side="right")
-        self._button(titlebar, "⚙", self.open_settings).pack(side="right")
-        self._button(titlebar, "?", self.copy_diagnostics).pack(side="right")
-        self._button(titlebar, "↻", self.refresh_or_rescan).pack(side="right")
+        self._button(titlebar, "⚙", self.open_settings, "Configurações").pack(side="right")
+        self._button(titlebar, "?", self.copy_diagnostics, "Copiar diagnóstico").pack(side="right")
+        self._button(titlebar, "↻", self.refresh_or_rescan, "Atualizar ou verificar integrações").pack(side="right")
         for widget in (titlebar, label):
             widget.bind("<ButtonPress-1>", self._start_drag)
             widget.bind("<B1-Motion>", self._drag)
@@ -1120,8 +1196,8 @@ class UsageWidget:
             bd=0, padx=9, pady=4, font=("Segoe UI", 8), cursor="hand2"
         )
 
-    def _button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
-        return tk.Button(
+    def _button(self, master: tk.Misc, text: str, command: Any, tooltip: str) -> tk.Button:
+        button = tk.Button(
             master,
             text=text,
             command=command,
@@ -1134,6 +1210,8 @@ class UsageWidget:
             font=("Segoe UI Symbol", 10),
             cursor="hand2",
         )
+        self.button_tooltips[button] = HoverTooltip(button, tooltip)
+        return button
 
     def _provider_title(self, text: str, company: str, accent: str) -> None:
         row = tk.Frame(self.body, bg=BG)
@@ -1251,11 +1329,15 @@ class UsageWidget:
         else:
             self.body.pack(fill="both", expand=True, padx=12, pady=(6, 10))
             self.root.geometry(f"{WINDOW_WIDTH}x{self.window_height}")
+        self.button_tooltips[self.collapse_button].set_text("Expandir" if self.collapsed else "Recolher")
 
     def toggle_topmost(self) -> None:
         self.topmost = not self.topmost
         self.root.attributes("-topmost", self.topmost)
         self.pin_button.configure(fg=ORANGE if self.topmost else MUTED)
+        self.button_tooltips[self.pin_button].set_text(
+            "Desafixar da frente" if self.topmost else "Manter sempre visível"
+        )
 
     def toggle_layout(self) -> None:
         # A troca de aparência não inicia uma consulta: reaproveita o último
@@ -1280,6 +1362,9 @@ class UsageWidget:
             if message := self.last_meter_errors.get(profile["id"]):
                 self._render_profile_error(profile, message)
         self.layout_button.configure(text="▤" if self.layout == "cards" else "▥")
+        self.button_tooltips[self.layout_button].set_text(
+            "Usar modo compacto" if self.layout == "cards" else "Usar modo cartões"
+        )
         self.status.configure(text=status_text, fg=status_color)
         self.last_updated.configure(text=updated_text)
         self._resize_to_content()
@@ -1334,7 +1419,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.12",
+            "versao": "0.1.14",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [

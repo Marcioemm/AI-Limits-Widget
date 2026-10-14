@@ -78,14 +78,16 @@ botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
 
 O widget pode ser arrastado pela barra superior e possui
 botões para atualizar/verificar novamente, abrir configurações, copiar um
-diagnóstico seguro, fixar, recolher e encerrar.
+diagnóstico seguro, fixar, recolher e encerrar. Deixe o cursor sobre qualquer
+ícone da barra para ver uma descrição rápida da ação.
 
 Use o botão de layout (`▤`/`▥`) ao lado do título **LIMITES DE IA** para
 alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
-computador. No modo compacto, cada perfil aparece como uma bateria com o
-percentual dentro; são exibidas até duas baterias por linha. Ela representa a
-janela de 5 horas e, quando essa janela não é fornecida pela CLI, representa a
-janela semanal. O modo compacto não mostra rodapé ou horário de atualização.
+computador. No modo compacto, cada perfil aparece como uma bateria segmentada,
+com células de carga e o percentual dentro; são exibidas até duas baterias por
+linha. Ela representa a janela de 5 horas e, quando essa janela não é fornecida
+pela CLI, representa a janela semanal. O modo compacto não mostra rodapé ou
+horário de atualização.
 Deixe o cursor por um segundo sobre uma bateria para expandir o widget e ver
 rapidamente o perfil, a janela acompanhada, a renovação e a última atualização,
 sem fazer uma nova consulta.
