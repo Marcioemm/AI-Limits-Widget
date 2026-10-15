@@ -1075,9 +1075,9 @@ class UsageWidget:
         self.pin_button = self._button(titlebar, "●", self.toggle_topmost, "Desafixar da frente")
         self.pin_button.configure(fg=ORANGE)
         self.pin_button.pack(side="right")
-        layout_hint = "Usar modo compacto" if self.layout == "cards" else "Usar modo cartões"
+        layout_hint = "Usar modo compacto" if self.layout == "cards" else "Mostrar detalhes"
         self.layout_button = self._button(
-            titlebar, "▤" if self.layout == "cards" else "▥", self.toggle_layout, layout_hint
+            titlebar, "⊟" if self.layout == "cards" else "⊞", self.toggle_layout, layout_hint
         )
         self.layout_button.pack(side="right")
         self._button(titlebar, "⚙", self.open_settings, "Configurações").pack(side="right")
@@ -1361,9 +1361,9 @@ class UsageWidget:
                 self._render_profile_meters(profile, *saved)
             if message := self.last_meter_errors.get(profile["id"]):
                 self._render_profile_error(profile, message)
-        self.layout_button.configure(text="▤" if self.layout == "cards" else "▥")
+        self.layout_button.configure(text="⊟" if self.layout == "cards" else "⊞")
         self.button_tooltips[self.layout_button].set_text(
-            "Usar modo compacto" if self.layout == "cards" else "Usar modo cartões"
+            "Usar modo compacto" if self.layout == "cards" else "Mostrar detalhes"
         )
         self.status.configure(text=status_text, fg=status_color)
         self.last_updated.configure(text=updated_text)
@@ -1419,7 +1419,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.14",
+            "versao": "0.1.15",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [

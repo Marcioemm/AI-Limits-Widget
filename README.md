@@ -83,7 +83,7 @@ botões para atualizar/verificar novamente, abrir configurações, copiar um
 diagnóstico seguro, fixar, recolher e encerrar. Deixe o cursor sobre qualquer
 ícone da barra para ver uma descrição rápida da ação.
 
-Use o botão de layout (`▤`/`▥`) ao lado do título **LIMITES DE IA** para
+Use o botão de layout (`⊟`/`⊞`) ao lado do título **LIMITES DE IA** para
 alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
 computador. No modo compacto, cada perfil aparece como uma bateria segmentada,
 com células de carga e o percentual dentro; são exibidas até duas baterias por

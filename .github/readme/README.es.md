@@ -85,7 +85,7 @@ actualizar o comprobar de nuevo, abrir Configuración, copiar un diagnóstico
 seguro, fijar, contraer y cerrar. Coloca el cursor sobre cualquier icono de la
 barra para ver una breve descripción de su acción.
 
-Usa el botón de diseño (`▤`/`▥`) junto al título **LÍMITES DE IA** para alternar
+Usa el botón de diseño (`⊟`/`⊞`) junto al título **LÍMITES DE IA** para alternar
 entre **Tarjetas** y **Compacto**. La elección se guarda solo en este equipo.
 En modo compacto, cada perfil se representa mediante una batería segmentada con
 celdas de carga y el porcentaje en su interior; se muestran hasta dos baterías

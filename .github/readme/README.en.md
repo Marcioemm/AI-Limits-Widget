@@ -83,7 +83,7 @@ You can drag the widget using its title bar. Its controls let you refresh/check
 again, open Settings, copy safe diagnostics, pin, collapse, and close it. Hover
 over a title-bar icon to see a short description of its action.
 
-Use the layout button (`▤`/`▥`) next to the **AI LIMITS** title to switch
+Use the layout button (`⊟`/`⊞`) next to the **AI LIMITS** title to switch
 between **Cards** and **Compact**. The choice is saved only on this computer.
 In compact mode, each profile is represented by a segmented battery with charge
 cells and a percentage inside; up to two batteries appear on each row. It
