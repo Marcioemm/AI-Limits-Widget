@@ -1,4 +1,4 @@
-"""Widget nativo para acompanhar os limites do Codex e Claude Code."""
+"""Widget nativo para acompanhar limites do Codex, Claude Code e Gemini."""
 
 from __future__ import annotations
 
@@ -20,6 +20,11 @@ import urllib.request
 import webbrowser
 from typing import Any
 
+try:
+    from .agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+except ImportError:  # Execução direta por scripts/start.ps1.
+    from agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+
 
 BG = "#11130f"
 PANEL = "#191c17"
@@ -29,6 +34,7 @@ TEXT = "#f0f2eb"
 MUTED = "#969d8c"
 ORANGE = "#c46a2b"
 CLAUDE_PURPLE = "#9672c4"
+GEMINI_BLUE = "#68a5f3"
 YELLOW = "#f5c451"
 RED = "#f47676"
 WINDOW_WIDTH = 356
@@ -40,11 +46,30 @@ DEFAULT_CONFIG = {
     "providers": ["codex", "claude"],
     "refreshMinutes": 5,
     "layout": "cards",
-    "executables": {"codex": None, "claude": None},
+    "executables": {"codex": None, "claude": None, "gemini": None},
     "profiles": [],
 }
 CODEX_CLI_DOCS = "https://learn.chatgpt.com/docs/codex/cli"
 CLAUDE_CODE_DOCS = "https://docs.anthropic.com/en/docs/claude-code/getting-started"
+AGY_DOCS = "https://antigravity.google/docs/cli/"
+PROVIDERS = ("codex", "claude", "gemini")
+
+
+def provider_commands(provider: str) -> tuple[str, ...]:
+    commands = {
+        "codex": ("codex.exe", "codex.cmd", "codex"),
+        "claude": ("claude.exe", "claude.cmd", "claude"),
+        "gemini": ("agy.exe", "agy.cmd", "agy"),
+    }
+    return commands[provider]
+
+
+def provider_visuals(provider: str) -> tuple[str, str, str]:
+    return {
+        "codex": (CLAUDE_PURPLE, "CODEX", "OPENAI"),
+        "claude": (ORANGE, "CLAUDE CODE", "ANTHROPIC"),
+        "gemini": (GEMINI_BLUE, "GEMINI", "GOOGLE"),
+    }[provider]
 
 
 def load_config() -> dict[str, Any]:
@@ -63,7 +88,7 @@ def load_config() -> dict[str, Any]:
 
     providers = loaded.get("providers")
     if isinstance(providers, list):
-        config["providers"] = [item for item in providers if item in {"codex", "claude"}]
+        config["providers"] = [item for item in providers if item in PROVIDERS]
     try:
         config["refreshMinutes"] = max(5, min(120, int(loaded.get("refreshMinutes", 5))))
     except (TypeError, ValueError):
@@ -72,7 +97,7 @@ def load_config() -> dict[str, Any]:
         config["layout"] = loaded["layout"]
     executables = loaded.get("executables")
     if isinstance(executables, dict):
-        for provider in ("codex", "claude"):
+        for provider in PROVIDERS:
             value = executables.get(provider)
             config["executables"][provider] = value if isinstance(value, str) and value.strip() else None
     if isinstance(loaded.get("profiles"), list):
@@ -139,7 +164,7 @@ def load_profiles() -> list[dict[str, Any]]:
     profiles: list[dict[str, Any]] = []
     if isinstance(loaded, list):
         for index, item in enumerate(loaded):
-            if not isinstance(item, dict) or item.get("provider") not in {"codex", "claude"}:
+            if not isinstance(item, dict) or item.get("provider") not in PROVIDERS:
                 continue
             provider = item["provider"]
             label = str(item.get("label") or f"{provider.title()} {index + 1}").strip()
@@ -187,16 +212,24 @@ def profile_is_available(profile: dict[str, Any]) -> bool:
 def profile_unavailable_reason(profile: dict[str, Any]) -> str | None:
     provider = profile["provider"]
     executable = profile.get("executable")
-    commands = ("codex.exe", "codex.cmd", "codex") if provider == "codex" else ("claude.exe", "claude.cmd", "claude")
+    commands = provider_commands(provider)
     if not configured_executable(executable, commands):
         if provider == "codex":
             return "Codex CLI não encontrado. Instale-o e entre com sua conta ChatGPT."
-        return "Claude Code não encontrado. Instale-o e entre com sua conta Anthropic."
+        if provider == "claude":
+            return "Claude Code não encontrado. Instale-o e entre com sua conta Anthropic."
+        return "AGY não encontrado. Instale o Antigravity CLI e entre com sua conta Google."
     if provider == "claude":
         config_dir = profile.get("configDir") or os.environ.get("CLAUDE_CONFIG_DIR")
         credentials = (pathlib.Path(config_dir) / ".credentials.json") if config_dir else pathlib.Path.home() / ".claude" / ".credentials.json"
         if not credentials.is_file():
             return 'Claude Code não autenticado. Execute "claude auth login" e abra o widget novamente.'
+    if provider == "gemini":
+        state = statusline_state()
+        if state == "missing":
+            return "Integração do AGY ainda não ativada. Abra Configurações e salve com Gemini marcado."
+        if state == "conflict":
+            return "O AGY já possui outra statusline; ela não foi sobrescrita."
     return None
 
 
@@ -815,16 +848,17 @@ class SettingsDialog(tk.Toplevel):
         self.provider_vars = {
             "codex": tk.BooleanVar(value="codex" in enabled),
             "claude": tk.BooleanVar(value="claude" in enabled),
+            "gemini": tk.BooleanVar(value="gemini" in enabled),
         }
         self.path_vars = {
             provider: tk.StringVar(value=self.config["executables"].get(provider) or "")
-            for provider in ("codex", "claude")
+            for provider in PROVIDERS
         }
         self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
         self.extra_profiles = [
             dict(item)
             for item in self.config.get("profiles", [])
-            if isinstance(item, dict) and item.get("id") not in {"codex-default", "claude-default"}
+            if isinstance(item, dict) and item.get("id") not in {"codex-default", "claude-default", "gemini-default"}
         ]
         self._build()
 
@@ -848,9 +882,15 @@ class SettingsDialog(tk.Toplevel):
         tk.Checkbutton(providers, text="Codex CLI", variable=self.provider_vars["codex"], bg=BG, fg=TEXT,
                        selectcolor=PANEL_2, activebackground=BG, activeforeground=TEXT).pack(side="left", padx=(0, 14))
         tk.Checkbutton(providers, text="Claude Code", variable=self.provider_vars["claude"], bg=BG, fg=TEXT,
+                       selectcolor=PANEL_2, activebackground=BG, activeforeground=TEXT).pack(side="left", padx=(0, 14))
+        tk.Checkbutton(providers, text="Gemini (AGY)", variable=self.provider_vars["gemini"], bg=BG, fg=TEXT,
                        selectcolor=PANEL_2, activebackground=BG, activeforeground=TEXT).pack(side="left")
 
-        for provider, title in (("codex", "Executável do Codex CLI"), ("claude", "Executável do Claude Code")):
+        for provider, title in (
+            ("codex", "Executável do Codex CLI"),
+            ("claude", "Executável do Claude Code"),
+            ("gemini", "Executável do Antigravity CLI (agy)"),
+        ):
             self._label(body, title)
             row = tk.Frame(body, bg=BG)
             row.pack(fill="x")
@@ -861,6 +901,12 @@ class SettingsDialog(tk.Toplevel):
         self._label(body, "Intervalo de atualização (minutos, de 5 a 120)")
         tk.Entry(body, textvariable=self.refresh_var, width=8, bg=PANEL, fg=TEXT, insertbackground=TEXT,
                  relief="flat").pack(anchor="w", ipady=4)
+
+        tk.Label(
+            body,
+            text="Gemini usa a statusline oficial do AGY. Ao salvar, o widget ativa um coletor local que guarda somente modelo, percentual e renovação.",
+            bg=BG, fg=MUTED, justify="left", wraplength=480, font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(8, 0))
 
         self._label(body, "Perfis adicionais")
         profile_row = tk.Frame(body, bg=BG)
@@ -958,22 +1004,42 @@ class SettingsDialog(tk.Toplevel):
             {"id": f"{provider}-default", "provider": provider, "label": "Padrão", "executable": executables[provider], "configDir": None}
             for provider in providers
         ]
-        profiles.extend(self.extra_profiles)
+        profiles.extend(profile for profile in self.extra_profiles if profile.get("provider") != "gemini")
+        integration: str | None = None
+        remove_agy_after_save = "gemini" not in providers
+        if "gemini" in providers:
+            try:
+                integration = install_statusline(command=bridge_command())
+            except RuntimeError as exc:
+                messagebox.showerror("Integração com AGY", str(exc), parent=self)
+                return
+            if integration == "conflict":
+                messagebox.showerror(
+                    "Integração com AGY",
+                    "O AGY já possui uma statusline personalizada. Ela não foi sobrescrita. "
+                    "Remova ou integre essa configuração manualmente antes de ativar o Gemini.",
+                    parent=self,
+                )
+                return
         try:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
                                                "layout": self.widget.layout, "executables": executables,
                                                "profiles": profiles}, ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError as exc:
+            if integration == "installed":
+                remove_statusline()
             messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)
             return
+        if remove_agy_after_save:
+            remove_statusline()
         self.widget.rescan_integrations()
         self.destroy()
 
 
 class UsageWidget:
     def __init__(self) -> None:
-        self.clients: dict[str, CodexClient | ClaudeClient] = {}
+        self.clients: dict[str, CodexClient | ClaudeClient | AgyClient] = {}
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.last_claude_at: dict[str, float] = {}
         self.warnings: dict[str, str | None] = {}
@@ -1032,8 +1098,10 @@ class UsageWidget:
         for profile in self.profiles:
             if profile["provider"] == "codex":
                 self.clients[profile["id"]] = CodexClient(profile["executable"], profile["configDir"])
-            else:
+            elif profile["provider"] == "claude":
                 self.clients[profile["id"]] = ClaudeClient(profile["executable"], profile["configDir"], profile["id"])
+            else:
+                self.clients[profile["id"]] = AgyClient()
         self.last_claude_at = {}
         self.warnings = {profile["id"]: None for profile in self.profiles}
         self.last_windows = {}
@@ -1120,6 +1188,10 @@ class UsageWidget:
                 self._action_button(actions, "Instalar Codex CLI", lambda: webbrowser.open(CODEX_CLI_DOCS)).pack(side="left")
             if "claude" in missing:
                 self._action_button(actions, "Instalar Claude Code", lambda: webbrowser.open(CLAUDE_CODE_DOCS)).pack(side="left", padx=(6, 0))
+            if "gemini" in missing and not configured_executable(
+                self.config["executables"].get("gemini"), provider_commands("gemini")
+            ):
+                self._action_button(actions, "Instalar AGY", lambda: webbrowser.open(AGY_DOCS)).pack(side="left", padx=(6, 0))
             self._action_button(self.body, "Verificar novamente", self.rescan_integrations).pack(anchor="w", pady=(2, 0))
         compact_grid: tk.Frame | None = None
         if self.layout == "compact" and self.profiles:
@@ -1129,9 +1201,7 @@ class UsageWidget:
             compact_grid.columnconfigure(1, weight=1, uniform="batteries")
 
         for index, profile in enumerate(self.profiles):
-            accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
-            company = "OPENAI" if profile["provider"] == "codex" else "ANTHROPIC"
-            title = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
+            accent, title, company = provider_visuals(profile["provider"])
             if self.layout == "compact":
                 assert compact_grid is not None
                 short = BatteryMeter(compact_grid, accent)
@@ -1148,10 +1218,14 @@ class UsageWidget:
                 grid.pack(fill="x")
                 grid.columnconfigure(0, weight=1, uniform="meters")
                 grid.columnconfigure(1, weight=1, uniform="meters")
-                short = Meter(grid, "5 horas", accent)
+                short = Meter(grid, "Modelo ativo" if profile["provider"] == "gemini" else "5 horas", accent)
                 short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-                week = Meter(grid, "Semana", accent)
-                week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+                if profile["provider"] == "gemini":
+                    short.grid_configure(columnspan=2, padx=0)
+                    week = None
+                else:
+                    week = Meter(grid, "Semana", accent)
+                    week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
             self.meters[profile["id"]] = (short, week)
 
         if self.layout == "compact" and self.profiles:
@@ -1302,8 +1376,7 @@ class UsageWidget:
         if self.layout != "compact" or meter is not self.hover_meter or not meter.winfo_exists():
             return
         details = self.compact_details.get(profile["id"], {})
-        accent = CLAUDE_PURPLE if profile["provider"] == "codex" else ORANGE
-        provider = "CODEX" if profile["provider"] == "codex" else "CLAUDE CODE"
+        accent, provider, _company = provider_visuals(profile["provider"])
         percent = details.get("percent")
         value = "—" if percent is None else f"{percent}% restante"
         message = details.get("message") or format_reset(details.get("resetsAt"))
@@ -1311,11 +1384,12 @@ class UsageWidget:
                     self.hover_reset, self.hover_updated)):
             return
         self.hover_panel.configure(highlightbackground=accent)
-        self.hover_title.configure(text=f"{provider} · {profile['label'].upper()}", fg=accent)
+        hover_title = details.get("title") or f"{provider} · {profile['label'].upper()}"
+        self.hover_title.configure(text=hover_title, fg=accent)
         self.hover_window.configure(text=details.get("window", "LIMITE"))
         self.hover_value.configure(text=value)
         self.hover_reset.configure(text=message, fg=RED if details.get("error") else MUTED)
-        self.hover_updated.configure(text=self.last_refresh_text)
+        self.hover_updated.configure(text=details.get("updated") or self.last_refresh_text)
         if not self.hover_panel.winfo_manager():
             self.hover_panel.pack(fill="x", pady=(2, 6))
             self._resize_to_content()
@@ -1404,6 +1478,7 @@ class UsageWidget:
         for provider, commands in {
             "codex": ("codex.exe", "codex.cmd", "codex"),
             "claude": ("claude.exe", "claude.cmd", "claude"),
+            "gemini": ("agy.exe", "agy.cmd", "agy"),
         }.items():
             executable = configured_executable(self.config["executables"].get(provider), commands)
             info: dict[str, Any] = {"encontrado": bool(executable)}
@@ -1468,8 +1543,12 @@ class UsageWidget:
                 if kind == "profile":
                     profile, data = payload
                     short, week = self.meters[profile["id"]]
-                    first = data.get("primary") if profile["provider"] == "codex" else data.get("five_hour")
-                    second = data.get("secondary") if profile["provider"] == "codex" else data.get("seven_day")
+                    if profile["provider"] == "codex":
+                        first, second = data.get("primary"), data.get("secondary")
+                    elif profile["provider"] == "claude":
+                        first, second = data.get("five_hour"), data.get("seven_day")
+                    else:
+                        first, second = None, data.get("weekly")
                     self.last_meter_data[profile["id"]] = (first, second)
                     self.last_meter_errors.pop(profile["id"], None)
                     self._render_profile_meters(profile, first, second)
@@ -1527,8 +1606,25 @@ class UsageWidget:
                 "percent": remaining((data or {}).get("usedPercent")),
                 "resetsAt": (data or {}).get("resetsAt"),
             }
+            if profile["provider"] == "gemini":
+                model_name = str((data or {}).get("modelName") or "Gemini")
+                fetched_at = (data or {}).get("fetchedAt")
+                self.compact_details[profile["id"]].update(
+                    {
+                        "title": f"GEMINI · {model_name.upper()}",
+                        "updated": (
+                            f"Última atualização do AGY: {dt.datetime.fromtimestamp(fetched_at):%H:%M}"
+                            if fetched_at else "Última atualização do AGY: —"
+                        ),
+                    }
+                )
             if self.hover_meter is short and self.hover_panel and self.hover_panel.winfo_manager():
                 self._show_hover_details(profile, short)
+            return
+        if profile["provider"] == "gemini":
+            self._update_meter(short, second)
+            model_name = str((second or {}).get("modelName") or "Gemini")
+            short.title.configure(text=model_name.upper()[:42])
             return
         self._update_meter(short, first)
         if week:
@@ -1564,9 +1660,12 @@ def print_once() -> None:
             if profile["provider"] == "codex":
                 data = CodexClient(profile["executable"], profile["configDir"]).read_limits()
                 first, second = data.get("primary"), data.get("secondary")
-            else:
+            elif profile["provider"] == "claude":
                 data = ClaudeClient(profile["executable"], profile["configDir"], profile["id"]).read_limits()
                 first, second = data.get("five_hour"), data.get("seven_day")
+            else:
+                data = AgyClient().read_limits()
+                first, second = None, data.get("weekly")
             output[f"{profile['provider']}:{profile['label']}"] = {
                 "five_hour_remaining": remaining((first or {}).get("usedPercent")),
                 "weekly_remaining": remaining((second or {}).get("usedPercent")),
@@ -1577,10 +1676,20 @@ def print_once() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Widget de limites do Codex e Claude Code")
+    parser = argparse.ArgumentParser(description="Widget de limites do Codex, Claude Code e Gemini via AGY")
     parser.add_argument("--once", action="store_true", help="consulta uma vez sem abrir a interface")
+    parser.add_argument(
+        "--install-agy-integration",
+        action="store_true",
+        help="configura o coletor local de cotas na statusline do AGY",
+    )
     args = parser.parse_args()
-    if args.once:
+    if args.install_agy_integration:
+        result = install_statusline(command=bridge_command())
+        if result == "conflict":
+            raise RuntimeError("O AGY já possui uma statusline personalizada; nenhuma configuração foi alterada.")
+        print("Integração com AGY ativada.")
+    elif args.once:
         print_once()
     else:
         UsageWidget().run()

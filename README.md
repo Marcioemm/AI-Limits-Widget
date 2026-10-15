@@ -3,16 +3,16 @@
 [🇺🇸 English](.github/readme/README.en.md) · [🇪🇸 Español](.github/readme/README.es.md) · 🇧🇷 Português
 
 Widget leve para Windows que exibe, na área de trabalho, os limites de uso
-restantes do Codex e do Claude Code.
+restantes do Codex, Claude Code e Gemini pelo AGY.
 
 > O projeto é independente e não é afiliado, aprovado ou mantido pela OpenAI
-> ou Anthropic.
+> OpenAI, Anthropic ou Google.
 
 ## O que ele faz
 
 - Mostra percentuais restantes de janelas de uso, em vez de inventar uma
   conversão para “tokens restantes”.
-- Atualiza Codex e Claude Code em intervalos configurados (o padrão é 5 minutos).
+- Atualiza Codex, Claude Code e o cache do Gemini em intervalos configurados (o padrão é 5 minutos).
 - Funciona localmente e mantém o widget sempre visível, se desejado.
 - Preserva o último dado válido do Claude durante um bloqueio temporário.
 - Indica sessão expirada, ferramenta ausente e indisponibilidade de forma clara.
@@ -30,6 +30,7 @@ restantes do Codex e do Claude Code.
 - Python 3.10 ou superior, com Tkinter (incluído no instalador oficial do Python).
 - Opcional: Codex CLI autenticado, para exibir Codex.
 - Opcional: Claude Code autenticado, para exibir Claude Code.
+- Opcional: Antigravity CLI (`agy`) autenticado, para exibir o modelo Gemini ativo.
 
 Instale apenas as integrações que você pretende usar. Se uma CLI não estiver
 instalada ou autenticada, o widget continuará funcionando e mostrará o motivo
@@ -42,7 +43,7 @@ Baixe `AI-Limits-Widget-Setup-<versão>.exe` na página de
 opte pelo atalho na Área de Trabalho se desejar. O instalador inclui o runtime
 necessário para o widget; Python não é necessário para usá-lo.
 
-O Codex CLI e o Claude Code continuam opcionais e precisam estar instalados e
+O Codex CLI, o Claude Code e o Antigravity CLI (`agy`) continuam opcionais e precisam estar instalados e
 autenticados na mesma conta do Windows para que seus limites apareçam. O
 instalador não copia nem solicita credenciais.
 
@@ -50,6 +51,9 @@ O aplicativo desktop do Codex, por si só, não fornece a integração local usa
 pelo widget: instale também o [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
 para monitorar seus limites. Para Claude, siga a instalação oficial do
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started).
+Para Gemini, instale o [Antigravity CLI](https://antigravity.google/docs/cli/)
+e marque **Gemini (AGY)** nas configurações. O widget ativa uma statusline local
+que recebe a cota oficial do modelo Gemini ativo.
 Se nenhuma CLI estiver disponível, o widget mostra os links de instalação e o
 botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
 
@@ -105,9 +109,11 @@ Para automatizar a instalação, passe as opções diretamente:
 .\scripts\setup.ps1 -Providers both -RefreshMinutes 5 -CreateDesktopShortcut -Start
 ```
 
-Os valores aceitos em `-Providers` são `codex`, `claude` e `both`. Se a
+Os valores aceitos em `-Providers` são `codex`, `claude`, `gemini`, `both` e
+`all`. Se a
 CLI não estiver no PATH, informe seu arquivo executável — por exemplo,
-`-ClaudePath 'D:\ferramentas\claude.cmd'`. Os caminhos são opcionais: o
+`-ClaudePath 'D:\ferramentas\claude.cmd'` ou `-AgyPath 'D:\ferramentas\agy.exe'`.
+Os caminhos são opcionais: o
 widget tenta encontrar as ferramentas novamente a cada abertura.
 
 ### Várias contas
@@ -141,6 +147,17 @@ expire, o widget pede ao próprio CLI para renová-la localmente. Em respostas
 temporárias de limite de requisições, o último saldo válido é mantido e uma nova
 tentativa é agendada automaticamente.
 
+### Gemini pelo Antigravity CLI
+
+O widget usa a integração oficial de statusline do AGY. O JSON recebido contém
+vários dados de sessão, mas o coletor descarta tudo, exceto o nome do modelo
+Gemini ativo, o percentual semanal, a renovação e o horário da coleta. Se o
+modelo ativo no AGY for Claude ou GPT, ele é ignorado e não substitui o último
+Gemini conhecido. Uma statusline personalizada já existente nunca é
+sobrescrita automaticamente. Depois da ativação, abra o AGY ao menos uma vez;
+enquanto ele estiver em uso, o cache é atualizado sem consumir uma solicitação
+de modelo adicional.
+
 As integrações dependem das interfaces oferecidas pelas CLIs e podem exigir
 ajustes quando elas mudarem.
 
@@ -150,7 +167,8 @@ O aplicativo consulta somente processos e serviços necessários aos provedores
 ativados. Não há analytics, banco de dados remoto nem envio de credenciais para
 este repositório. Os dados locais ficam em
 `%LOCALAPPDATA%\LimitesIA` e contêm apenas preferências, percentuais e
-horários de atualização.
+horários de atualização. No caso do AGY, o cache sanitizado não contém e-mail,
+conversa, diretório de trabalho ou token.
 
 Antes de abrir uma issue, leia [SECURITY.md](SECURITY.md). Nunca envie arquivos
 de autenticação, tokens, logs completos ou capturas com informações privadas.
