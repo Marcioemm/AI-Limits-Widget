@@ -10,6 +10,7 @@ import pathlib
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -20,10 +21,10 @@ import urllib.request
 import webbrowser
 from typing import Any
 
-try:
-    from .agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
-except ImportError:  # Execução direta por scripts/start.ps1.
-    from agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+if __package__ in {None, ""}:  # Execução direta por scripts/start.ps1.
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from ai_limits_widget.agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
 
 
 BG = "#11130f"
@@ -1494,7 +1495,7 @@ class UsageWidget:
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.15",
+            "versao": "0.1.16",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [

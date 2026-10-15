@@ -57,6 +57,7 @@ try {
     --windowed `
     --name $appName `
     --paths (Join-Path $projectRoot 'src') `
+    --hidden-import ai_limits_widget.agy_integration `
     --distpath $distPath `
     --workpath $workPath `
     --specpath $specPath `
