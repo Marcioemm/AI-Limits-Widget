@@ -3,16 +3,16 @@
 [🇺🇸 English](README.en.md) · 🇪🇸 Español · [🇧🇷 Português](../../README.md)
 
 Widget ligero para Windows que muestra en el escritorio los límites de uso
-restantes de Codex y Claude Code.
+restantes de Codex, Claude Code y Gemini mediante AGY.
 
 > Este proyecto es independiente y no está afiliado, aprobado ni mantenido por
-> OpenAI o Anthropic.
+> OpenAI, Anthropic o Google.
 
 ## Qué hace
 
 - Muestra los porcentajes restantes de las ventanas de uso, sin inventar una
   conversión a «tokens restantes».
-- Actualiza Codex y Claude Code en intervalos configurables (cinco minutos de
+- Actualiza Codex, Claude Code y la caché de Gemini en intervalos configurables (cinco minutos de
   forma predeterminada).
 - Funciona localmente y puede permanecer siempre visible.
 - Conserva el último valor válido de Claude durante una limitación temporal.
@@ -32,6 +32,7 @@ restantes de Codex y Claude Code.
 - Python 3.10 o posterior con Tkinter (incluido en el instalador oficial de Python).
 - Opcional: Codex CLI autenticado, para mostrar Codex.
 - Opcional: Claude Code autenticado, para mostrar Claude Code.
+- Opcional: Antigravity CLI (`agy`) autenticado, para mostrar el modelo Gemini activo.
 
 Instala únicamente las integraciones que quieras usar. Si una CLI no está
 instalada o autenticada, el widget seguirá funcionando e indicará el motivo en
@@ -44,7 +45,7 @@ Descarga `AI-Limits-Widget-Setup-<versión>.exe` en la página de
 elige el acceso directo en el escritorio si lo deseas. El instalador incluye el
 runtime necesario para el widget; no necesitas Python para utilizarlo.
 
-Codex CLI y Claude Code siguen siendo opcionales y deben estar instalados y
+Codex CLI, Claude Code y Antigravity CLI (`agy`) siguen siendo opcionales y deben estar instalados y
 autenticados en la misma cuenta de Windows para que aparezcan sus límites. El
 instalador no copia ni solicita credenciales.
 
@@ -52,6 +53,9 @@ La aplicación de escritorio Codex por sí sola no proporciona la integración
 local que usa el widget: instala también [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
 para supervisar tus límites. Para Claude, sigue la guía oficial de
 [instalación de Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started).
+Para Gemini, instala [Antigravity CLI](https://antigravity.google/docs/cli/) y
+activa **Gemini (AGY)** en Configuración. El widget instala un puente local de
+statusline que recibe la cuota oficial del modelo Gemini activo.
 Si ninguna CLI está disponible, el widget muestra los enlaces de instalación y
 el botón **Comprobar de nuevo**; no es necesario reiniciar la aplicación.
 
@@ -85,7 +89,7 @@ actualizar o comprobar de nuevo, abrir Configuración, copiar un diagnóstico
 seguro, fijar, contraer y cerrar. Coloca el cursor sobre cualquier icono de la
 barra para ver una breve descripción de su acción.
 
-Usa el botón de diseño (`▤`/`▥`) junto al título **LÍMITES DE IA** para alternar
+Usa el botón de diseño (`⊟`/`⊞`) junto al título **LÍMITES DE IA** para alternar
 entre **Tarjetas** y **Compacto**. La elección se guarda solo en este equipo.
 En modo compacto, cada perfil se representa mediante una batería segmentada con
 celdas de carga y el porcentaje en su interior; se muestran hasta dos baterías
@@ -106,9 +110,9 @@ Para automatizar la instalación, pasa las opciones directamente:
 .\scripts\setup.ps1 -Providers both -RefreshMinutes 5 -CreateDesktopShortcut -Start
 ```
 
-Los valores aceptados en `-Providers` son `codex`, `claude` y `both`. Si la CLI
+Los valores aceptados en `-Providers` son `codex`, `claude`, `gemini`, `both` y `all`. Si la CLI
 no está en `PATH`, indica su ejecutable; por ejemplo,
-`-ClaudePath 'D:\herramientas\claude.cmd'`. Las rutas son opcionales: el widget
+`-ClaudePath 'D:\herramientas\claude.cmd'` o `-AgyPath 'D:\herramientas\agy.exe'`. Las rutas son opcionales: el widget
 intentará encontrar las herramientas de nuevo cada vez que se abra.
 
 ### Varias cuentas
@@ -141,6 +145,14 @@ Instala y autentica Claude Code en la misma cuenta de Windows. Si la sesión
 vence, el widget pide a la propia CLI que la renueve localmente. Ante respuestas
 temporales de límite de solicitudes, se conserva el último saldo válido y se
 programa automáticamente un nuevo intento.
+
+### Gemini mediante Antigravity CLI
+
+El widget usa la integración oficial de statusline de AGY. El colector conserva
+solamente el nombre del modelo Gemini activo, el porcentaje semanal, la
+renovación y la hora de captura. Los modelos Claude o GPT activos en AGY se
+ignoran, y una statusline personalizada existente nunca se sobrescribe
+automáticamente.
 
 Las integraciones dependen de las interfaces ofrecidas por las CLI y pueden
 requerir ajustes cuando estas cambien.

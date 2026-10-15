@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('codex', 'claude', 'both')]
+  [ValidateSet('codex', 'claude', 'gemini', 'both', 'all')]
   [string]$Providers,
   [ValidateRange(5, 120)]
   [int]$RefreshMinutes = 5,
   [string]$CodexPath,
   [string]$ClaudePath,
+  [string]$AgyPath,
   [switch]$CreateDesktopShortcut,
   [switch]$Start
 )
@@ -64,11 +65,13 @@ if (-not $Providers) {
   Write-Host 'AI Limits Widget - configuração' -ForegroundColor Cyan
   Write-Host 'O instalador não solicita nem salva senhas, tokens ou chaves de API.'
   do {
-    $answer = (Read-Host 'Quais provedores deseja monitorar? [C]odex, [A]nthropic/Claude, [B]oth').Trim().ToLowerInvariant()
+    $answer = (Read-Host 'Quais provedores deseja monitorar? [C]odex, [A]nthropic/Claude, [G]emini/AGY, [B]oth (Codex+Claude), [T]odos').Trim().ToLowerInvariant()
     $Providers = switch ($answer) {
       'c' { 'codex' }
       'a' { 'claude' }
+      'g' { 'gemini' }
       'b' { 'both' }
+      't' { 'all' }
       default { $null }
     }
   } until ($Providers)
@@ -84,10 +87,11 @@ if (-not $Providers) {
 
 $selected = switch ($Providers) {
   'both' { @('codex', 'claude') }
+  'all' { @('codex', 'claude', 'gemini') }
   default { @($Providers) }
 }
 
-$executables = [ordered]@{ codex = $null; claude = $null }
+$executables = [ordered]@{ codex = $null; claude = $null; gemini = $null }
 if ('codex' -in $selected) {
   $executables.codex = Resolve-Executable -Provider 'Codex CLI' -ProvidedPath $CodexPath -DetectedPath (Find-Executable @('codex.exe', 'codex.cmd', 'codex'))
 }
@@ -100,6 +104,16 @@ if ('claude' -in $selected) {
     }
   }
   $executables.claude = Resolve-Executable -Provider 'Claude Code' -ProvidedPath $ClaudePath -DetectedPath $claudeDetected
+}
+if ('gemini' -in $selected) {
+  $executables.gemini = Resolve-Executable -Provider 'Antigravity CLI (AGY)' -ProvidedPath $AgyPath -DetectedPath (Find-Executable @('agy.exe', 'agy.cmd', 'agy'))
+  $python = Get-Command python.exe -ErrorAction SilentlyContinue
+  if ($executables.gemini -and $python) {
+    & $python.Source (Join-Path $projectRoot 'src\ai_limits_widget\app.py') --install-agy-integration
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Não foi possível ativar a integração segura com a statusline do AGY.'
+    }
+  }
 }
 
 $profiles = @()
