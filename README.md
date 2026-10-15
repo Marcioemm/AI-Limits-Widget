@@ -1,5 +1,7 @@
 # AI Limits Widget
 
+[🇺🇸 English](.github/readme/README.en.md) · [🇪🇸 Español](.github/readme/README.es.md) · 🇧🇷 Português
+
 Widget leve para Windows que exibe, na área de trabalho, os limites de uso
 restantes do Codex e do Claude Code.
 
