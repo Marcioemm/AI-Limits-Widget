@@ -21,6 +21,11 @@ import webbrowser
 from typing import Any
 
 try:
+    import winreg
+except ImportError:  # Permite importar o módulo para testes fora do Windows.
+    winreg = None
+
+try:
     from .agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
 except ImportError:  # Execução direta por scripts/start.ps1.
     from agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
@@ -46,9 +51,12 @@ DEFAULT_CONFIG = {
     "providers": ["codex", "claude"],
     "refreshMinutes": 5,
     "layout": "cards",
+    "startWithWindows": False,
     "executables": {"codex": None, "claude": None, "gemini": None},
     "profiles": [],
 }
+WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+WINDOWS_RUN_VALUE = "AI Limits Widget"
 CODEX_CLI_DOCS = "https://learn.chatgpt.com/docs/codex/cli"
 CLAUDE_CODE_DOCS = "https://docs.anthropic.com/en/docs/claude-code/getting-started"
 AGY_DOCS = "https://antigravity.google/docs/cli/"
@@ -78,6 +86,7 @@ def load_config() -> dict[str, Any]:
         "providers": list(DEFAULT_CONFIG["providers"]),
         "refreshMinutes": DEFAULT_CONFIG["refreshMinutes"],
         "layout": DEFAULT_CONFIG["layout"],
+        "startWithWindows": DEFAULT_CONFIG["startWithWindows"],
         "executables": dict(DEFAULT_CONFIG["executables"]),
         "profiles": [],
     }
@@ -95,6 +104,8 @@ def load_config() -> dict[str, Any]:
         pass
     if loaded.get("layout") in {"cards", "compact"}:
         config["layout"] = loaded["layout"]
+    if isinstance(loaded.get("startWithWindows"), bool):
+        config["startWithWindows"] = loaded["startWithWindows"]
     executables = loaded.get("executables")
     if isinstance(executables, dict):
         for provider in PROVIDERS:
@@ -103,6 +114,32 @@ def load_config() -> dict[str, Any]:
     if isinstance(loaded.get("profiles"), list):
         config["profiles"] = loaded["profiles"]
     return config
+
+
+def startup_command() -> str:
+    """Retorna o comando que o Windows executa após o login do usuário."""
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+
+    python = pathlib.Path(sys.executable)
+    pythonw = python.with_name("pythonw.exe")
+    executable = pythonw if pythonw.is_file() else python
+    return f'"{executable}" "{pathlib.Path(__file__).resolve()}"'
+
+
+def set_start_with_windows(enabled: bool) -> None:
+    """Cria ou remove a entrada de inicialização automática do usuário atual."""
+    if winreg is None:
+        raise OSError("A inicialização automática só está disponível no Windows.")
+
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+        if enabled:
+            winreg.SetValueEx(key, WINDOWS_RUN_VALUE, 0, winreg.REG_SZ, startup_command())
+            return
+        try:
+            winreg.DeleteValue(key, WINDOWS_RUN_VALUE)
+        except FileNotFoundError:
+            pass
 
 
 def claude_account_email(config_dir: pathlib.Path, is_default: bool) -> str | None:
@@ -855,6 +892,7 @@ class SettingsDialog(tk.Toplevel):
             for provider in PROVIDERS
         }
         self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
+        self.start_with_windows_var = tk.BooleanVar(value=self.config["startWithWindows"])
         self.extra_profiles = [
             dict(item)
             for item in self.config.get("profiles", [])
@@ -901,6 +939,17 @@ class SettingsDialog(tk.Toplevel):
         self._label(body, "Intervalo de atualização (minutos, de 5 a 120)")
         tk.Entry(body, textvariable=self.refresh_var, width=8, bg=PANEL, fg=TEXT, insertbackground=TEXT,
                  relief="flat").pack(anchor="w", ipady=4)
+
+        tk.Checkbutton(
+            body,
+            text="Abrir o widget automaticamente ao iniciar o Windows",
+            variable=self.start_with_windows_var,
+            bg=BG,
+            fg=TEXT,
+            selectcolor=PANEL_2,
+            activebackground=BG,
+            activeforeground=TEXT,
+        ).pack(anchor="w", pady=(10, 0))
 
         tk.Label(
             body,
@@ -1000,6 +1049,7 @@ class SettingsDialog(tk.Toplevel):
             messagebox.showerror("Configurações", "O intervalo deve ser um número entre 5 e 120.", parent=self)
             return
         executables = {provider: variable.get().strip() or None for provider, variable in self.path_vars.items()}
+        start_with_windows = self.start_with_windows_var.get()
         profiles = [
             {"id": f"{provider}-default", "provider": provider, "label": "Padrão", "executable": executables[provider], "configDir": None}
             for provider in providers
@@ -1022,13 +1072,29 @@ class SettingsDialog(tk.Toplevel):
                 )
                 return
         try:
-            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
-                                               "layout": self.widget.layout, "executables": executables,
-                                               "profiles": profiles}, ensure_ascii=False, indent=2), encoding="utf-8")
+            set_start_with_windows(start_with_windows)
         except OSError as exc:
             if integration == "installed":
                 remove_statusline()
+            messagebox.showerror(
+                "Inicialização automática",
+                f"Não foi possível atualizar a inicialização do Windows: {exc}",
+                parent=self,
+            )
+            return
+        try:
+            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
+                                               "layout": self.widget.layout, "executables": executables,
+                                               "profiles": profiles, "startWithWindows": start_with_windows},
+                                               ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            if integration == "installed":
+                remove_statusline()
+            try:
+                set_start_with_windows(self.config["startWithWindows"])
+            except OSError:
+                pass
             messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)
             return
         if remove_agy_after_save:
