@@ -10,6 +10,7 @@ import pathlib
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -25,10 +26,10 @@ try:
 except ImportError:  # Permite importar o módulo para testes fora do Windows.
     winreg = None
 
-try:
-    from .agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
-except ImportError:  # Execução direta por scripts/start.ps1.
-    from agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+if __package__ in {None, ""}:  # Execução direta por scripts/start.ps1 e pelo PyInstaller.
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from ai_limits_widget.agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
 
 
 BG = "#11130f"
