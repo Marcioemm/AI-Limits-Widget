@@ -18,6 +18,7 @@ dados pessoais. Para vulnerabilidades, siga [SECURITY.md](SECURITY.md).
 3. Execute a validação local:
 
    ```powershell
+   python -m pip install --editable .
    python -m compileall .\src
    python -m unittest discover -s .\tests -v
    ```
@@ -65,7 +66,7 @@ Depois de este arquivo chegar à `main`, configure uma regra de proteção ou
 
 - pull request antes do merge;
 - uma aprovação do proprietário de código;
-- o status **Testes (Windows)** concluído com sucesso;
+- os status **Testes (Windows)** e **Testes (Ubuntu)** concluídos com sucesso;
 - conversa resolvida antes do merge.
 
 O arquivo [.github/CODEOWNERS](.github/CODEOWNERS) designa `@Marcioemm` como

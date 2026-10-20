@@ -2,7 +2,7 @@
 
 [🇺🇸 English](.github/readme/README.en.md) · [🇪🇸 Español](.github/readme/README.es.md) · 🇧🇷 Português
 
-Um widget leve para Windows que deixa, na área de trabalho, uma visão simples
+Um widget leve para Windows e Ubuntu que deixa, na área de trabalho, uma visão simples
 dos limites de uso restantes do Codex, Claude Code e Gemini pelo AGY.
 
 > Este é um projeto independente. Ele não é afiliado, aprovado nem mantido por
@@ -28,8 +28,8 @@ dos limites de uso restantes do Codex, Claude Code e Gemini pelo AGY.
 
 ## Requisitos
 
-- Windows 10 ou 11.
-- Python 3.10 ou superior, com Tkinter (incluído no instalador oficial do Python).
+- Windows 10 ou 11, ou Ubuntu 24.04 LTS.
+- Para executar pelo código-fonte: Python 3.10 ou superior com Tkinter.
 - Opcional: Codex CLI autenticado, para exibir Codex.
 - Opcional: Claude Code autenticado, para exibir Claude Code.
 - Opcional: Antigravity CLI (`agy`) autenticado, para exibir o modelo Gemini ativo.
@@ -37,7 +37,7 @@ dos limites de uso restantes do Codex, Claude Code e Gemini pelo AGY.
 Instale apenas o que você pretende usar. Se alguma CLI não estiver instalada ou
 autenticada, o widget continua abrindo e mostra o motivo na seção correspondente.
 
-## Instalação pelo instalador
+## Instalação no Windows
 
 Baixe `AI-Limits-Widget-Setup-<versão>.exe` na página de
 [Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases) e execute-o.
@@ -58,26 +58,47 @@ para ler a cota oficial do modelo Gemini ativo. Se nenhuma CLI estiver
 disponível, ele mostra os links de instalação e o botão **Verificar novamente**;
 não é necessário reiniciar o aplicativo.
 
+## Instalação no Ubuntu
+
+Baixe `ai-limits-widget_<versão>_amd64.deb` e o respectivo `.sha256` na página
+de [Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases). Depois:
+
+```bash
+sha256sum --check ai-limits-widget_<versão>_amd64.deb.sha256
+sudo apt install ./ai-limits-widget_<versão>_amd64.deb
+```
+
+Abra **AI Limits Widget** pelo menu ou execute `ai-limits-widget`. O pacote já
+inclui o runtime do widget; as CLIs dos provedores continuam opcionais e são
+detectadas no `PATH` da mesma conta Linux.
+
 ## Instalação pelo código-fonte
 
-1. Clone o repositório:
+1. Clone o repositório no Windows ou Ubuntu:
 
    ```powershell
    git clone https://github.com/Marcioemm/AI-Limits-Widget.git
    cd ai-limits-widget
    ```
 
-2. Inicie o widget:
+2. No Windows, inicie o widget:
 
    ```powershell
    .\scripts\start.ps1
    ```
 
-   Abra **⚙ Configurações** para escolher os provedores, ajustar o intervalo,
-   indicar um executável fora do `PATH`, cadastrar perfis extras e decidir se o
-   widget deve abrir junto com o Windows. Nenhuma credencial é pedida ou salva.
+3. No Ubuntu, instale as dependências e configure a entrada do menu:
 
-3. Para encerrar apenas este widget:
+   ```bash
+   sudo apt install python3 python3-venv python3-tk
+   bash scripts/setup.sh
+   ```
+
+4. Abra **⚙ Configurações** para escolher os provedores, ajustar o intervalo,
+   indicar um executável fora do `PATH`, cadastrar perfis extras e decidir se o
+   widget deve abrir junto com o sistema. Nenhuma credencial é pedida ou salva.
+
+5. No Windows, para encerrar apenas este widget:
 
    ```powershell
    .\scripts\stop.ps1
@@ -117,6 +138,9 @@ CLI não estiver no PATH, informe seu arquivo executável — por exemplo,
 Os caminhos são opcionais: o
 widget tenta encontrar as ferramentas novamente a cada abertura.
 
+No Ubuntu, `bash scripts/setup.sh` cria o ambiente virtual e registra o widget
+no menu de aplicativos.
+
 ### Várias contas
 
 O widget mostra um cartão para cada perfil local que consegue identificar. O
@@ -137,13 +161,13 @@ diretórios que a própria pessoa indicou no instalador.
 
 ### Codex
 
-Instale e autentique o Codex CLI na mesma conta do Windows. O widget inicia o
+Instale e autentique o Codex CLI na mesma conta do sistema. O widget inicia o
 processo local do Codex apenas durante a consulta e o encerra em seguida, para
 reduzir o consumo de memória em repouso.
 
 ### Claude Code
 
-Instale e autentique o Claude Code na mesma conta do Windows. Caso a sessão
+Instale e autentique o Claude Code na mesma conta do sistema. Caso a sessão
 expire, o widget pede ao próprio CLI para renová-la localmente. Em respostas
 temporárias de limite de requisições, o último saldo válido é mantido e uma nova
 tentativa é agendada automaticamente.
@@ -167,9 +191,11 @@ ajustes quando elas mudarem.
 O aplicativo consulta apenas os processos e serviços necessários para os
 provedores que você ativou. Não há analytics, banco de dados remoto nem envio de
 credenciais para este repositório. Os dados ficam no seu computador, em
-`%LOCALAPPDATA%\LimitesIA`, e contêm somente preferências, percentuais e
-horários de atualização. No caso do AGY, o cache sanitizado não inclui e-mail,
-conversa, diretório de trabalho nem token.
+`%LOCALAPPDATA%\LimitesIA` no Windows. No Linux, configurações ficam em
+`~/.config/ai-limits-widget` e caches em `~/.cache/ai-limits-widget`. Esses
+arquivos contêm somente preferências, percentuais e horários de atualização.
+No caso do AGY, o cache sanitizado não inclui e-mail, conversa, diretório de
+trabalho ou token.
 
 Antes de abrir uma issue, leia [SECURITY.md](SECURITY.md). Não envie arquivos de
 autenticação, tokens, logs completos ou capturas com informações privadas. O
@@ -181,8 +207,8 @@ caminhos locais.
 
 Para consultar sem abrir a janela:
 
-```powershell
-python .\src\ai_limits_widget\app.py --once
+```text
+python src/ai_limits_widget/app.py --once
 ```
 
 Se o Claude Code disser que a sessão expirou, execute:
@@ -199,6 +225,7 @@ PowerShell e reinicie o widget.
 O projeto não usa dependências de terceiros. Para uma validação básica:
 
 ```powershell
+python -m pip install --editable .
 python -m compileall .\src
 python -m unittest discover -s .\tests -v
 python .\src\ai_limits_widget\app.py --once

@@ -7,18 +7,28 @@ from unittest.mock import ANY, MagicMock, patch
 from ai_limits_widget import app
 
 
-class StartWithWindowsTests(unittest.TestCase):
-    def test_load_config_reads_start_with_windows_preference(self):
+class StartAtLoginTests(unittest.TestCase):
+    def test_load_config_migrates_start_with_windows_preference(self):
         with tempfile.TemporaryDirectory() as directory:
             config_file = pathlib.Path(directory) / "config.json"
             config_file.write_text(json.dumps({"startWithWindows": True}), encoding="utf-8")
             with patch.object(app, "CONFIG_FILE", config_file):
-                self.assertTrue(app.load_config()["startWithWindows"])
+                self.assertTrue(app.load_config()["startAtLogin"])
+
+    def test_load_config_prefers_platform_neutral_preference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_file = pathlib.Path(directory) / "config.json"
+            config_file.write_text(
+                json.dumps({"startAtLogin": False, "startWithWindows": True}),
+                encoding="utf-8",
+            )
+            with patch.object(app, "CONFIG_FILE", config_file):
+                self.assertFalse(app.load_config()["startAtLogin"])
 
     def test_load_config_uses_false_when_preference_is_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(app, "CONFIG_FILE", pathlib.Path(directory) / "config.json"):
-                self.assertFalse(app.load_config()["startWithWindows"])
+                self.assertFalse(app.load_config()["startAtLogin"])
 
     def test_enabling_creates_windows_run_entry(self):
         registry = MagicMock()

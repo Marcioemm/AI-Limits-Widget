@@ -27,8 +27,30 @@ except ImportError:  # Permite importar o módulo para testes fora do Windows.
 
 try:
     from .agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+    from .platform_support import (
+        WINDOWS_RUN_KEY,
+        WINDOWS_RUN_VALUE,
+        cache_dir,
+        config_dir,
+        font_family,
+        is_windows,
+        set_start_at_login as platform_set_start_at_login,
+        startup_command as platform_startup_command,
+        symbol_font_family,
+    )
 except ImportError:  # Execução direta por scripts/start.ps1.
     from agy_integration import AgyClient, bridge_command, install_statusline, remove_statusline, statusline_state
+    from platform_support import (
+        WINDOWS_RUN_KEY,
+        WINDOWS_RUN_VALUE,
+        cache_dir,
+        config_dir,
+        font_family,
+        is_windows,
+        set_start_at_login as platform_set_start_at_login,
+        startup_command as platform_startup_command,
+        symbol_font_family,
+    )
 
 
 BG = "#11130f"
@@ -45,31 +67,44 @@ RED = "#f47676"
 WINDOW_WIDTH = 356
 WINDOW_HEIGHT = 438
 COLLAPSED_HEIGHT = 42
-APP_DATA_DIR = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
+APP_DATA_DIR = config_dir()  # Alias preservado para integrações que importavam o nome antigo.
+APP_CACHE_DIR = cache_dir()
 CONFIG_FILE = APP_DATA_DIR / "config.json"
+FONT_FAMILY = font_family()
+SYMBOL_FONT_FAMILY = symbol_font_family()
 DEFAULT_CONFIG = {
     "providers": ["codex", "claude"],
     "refreshMinutes": 5,
     "layout": "cards",
-    "startWithWindows": False,
+    "startAtLogin": False,
     "executables": {"codex": None, "claude": None, "gemini": None},
     "profiles": [],
 }
-WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-WINDOWS_RUN_VALUE = "AI Limits Widget"
 CODEX_CLI_DOCS = "https://learn.chatgpt.com/docs/codex/cli"
 CLAUDE_CODE_DOCS = "https://docs.anthropic.com/en/docs/claude-code/getting-started"
 AGY_DOCS = "https://antigravity.google/docs/cli/"
 PROVIDERS = ("codex", "claude", "gemini")
 
 
-def provider_commands(provider: str) -> tuple[str, ...]:
-    commands = {
-        "codex": ("codex.exe", "codex.cmd", "codex"),
-        "claude": ("claude.exe", "claude.cmd", "claude"),
-        "gemini": ("agy.exe", "agy.cmd", "agy"),
-    }
+def provider_commands(provider: str, *, windows: bool | None = None) -> tuple[str, ...]:
+    on_windows = is_windows() if windows is None else windows
+    commands = (
+        {
+            "codex": ("codex.exe", "codex.cmd", "codex"),
+            "claude": ("claude.exe", "claude.cmd", "claude"),
+            "gemini": ("agy.exe", "agy.cmd", "agy"),
+        }
+        if on_windows
+        else {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",)}
+    )
     return commands[provider]
+
+
+def executable_filetypes(*, windows: bool | None = None) -> list[tuple[str, str]]:
+    on_windows = is_windows() if windows is None else windows
+    if on_windows:
+        return [("Executáveis", "*.exe *.cmd"), ("Todos os arquivos", "*.*")]
+    return [("Todos os arquivos", "*")]
 
 
 def provider_visuals(provider: str) -> tuple[str, str, str]:
@@ -86,7 +121,7 @@ def load_config() -> dict[str, Any]:
         "providers": list(DEFAULT_CONFIG["providers"]),
         "refreshMinutes": DEFAULT_CONFIG["refreshMinutes"],
         "layout": DEFAULT_CONFIG["layout"],
-        "startWithWindows": DEFAULT_CONFIG["startWithWindows"],
+        "startAtLogin": DEFAULT_CONFIG["startAtLogin"],
         "executables": dict(DEFAULT_CONFIG["executables"]),
         "profiles": [],
     }
@@ -104,8 +139,11 @@ def load_config() -> dict[str, Any]:
         pass
     if loaded.get("layout") in {"cards", "compact"}:
         config["layout"] = loaded["layout"]
-    if isinstance(loaded.get("startWithWindows"), bool):
-        config["startWithWindows"] = loaded["startWithWindows"]
+    if isinstance(loaded.get("startAtLogin"), bool):
+        config["startAtLogin"] = loaded["startAtLogin"]
+    elif isinstance(loaded.get("startWithWindows"), bool):
+        # Migração transparente das configurações criadas até a versão 0.1.15.
+        config["startAtLogin"] = loaded["startWithWindows"]
     executables = loaded.get("executables")
     if isinstance(executables, dict):
         for provider in PROVIDERS:
@@ -117,29 +155,18 @@ def load_config() -> dict[str, Any]:
 
 
 def startup_command() -> str:
-    """Retorna o comando que o Windows executa após o login do usuário."""
-    if getattr(sys, "frozen", False):
-        return f'"{sys.executable}"'
+    """Retorna o comando que o sistema executa após o login do usuário."""
+    return platform_startup_command(pathlib.Path(__file__).resolve())
 
-    python = pathlib.Path(sys.executable)
-    pythonw = python.with_name("pythonw.exe")
-    executable = pythonw if pythonw.is_file() else python
-    return f'"{executable}" "{pathlib.Path(__file__).resolve()}"'
+
+def set_start_at_login(enabled: bool) -> None:
+    """Ativa ou remove a inicialização automática do usuário atual."""
+    platform_set_start_at_login(enabled, startup_command(), registry=winreg)
 
 
 def set_start_with_windows(enabled: bool) -> None:
-    """Cria ou remove a entrada de inicialização automática do usuário atual."""
-    if winreg is None:
-        raise OSError("A inicialização automática só está disponível no Windows.")
-
-    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
-        if enabled:
-            winreg.SetValueEx(key, WINDOWS_RUN_VALUE, 0, winreg.REG_SZ, startup_command())
-            return
-        try:
-            winreg.DeleteValue(key, WINDOWS_RUN_VALUE)
-        except FileNotFoundError:
-            pass
+    """Compatibilidade com integrações que usavam o nome anterior."""
+    platform_set_start_at_login(enabled, startup_command(), windows=True, registry=winreg)
 
 
 def claude_account_email(config_dir: pathlib.Path, is_default: bool) -> str | None:
@@ -542,7 +569,7 @@ class ClaudeClient:
 
     @property
     def state_file(self) -> pathlib.Path:
-        return APP_DATA_DIR / f"claude_usage_cache_{self.profile_id}.json"
+        return APP_CACHE_DIR / f"claude_usage_cache_{self.profile_id}.json"
 
     def _load_state(self) -> None:
         try:
@@ -696,13 +723,13 @@ class Meter(tk.Frame):
         super().__init__(master, bg=PANEL, highlightbackground=accent, highlightthickness=1)
         self.accent = accent
         self.columnconfigure(0, weight=1)
-        self.title = tk.Label(self, text=title.upper(), bg=PANEL, fg=accent, font=("Segoe UI", 9, "bold"))
+        self.title = tk.Label(self, text=title.upper(), bg=PANEL, fg=accent, font=(FONT_FAMILY, 9, "bold"))
         self.title.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
-        self.value = tk.Label(self, text="—", bg=PANEL, fg=TEXT, font=("Segoe UI", 22, "bold"))
+        self.value = tk.Label(self, text="—", bg=PANEL, fg=TEXT, font=(FONT_FAMILY, 22, "bold"))
         self.value.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 2))
         self.canvas = tk.Canvas(self, height=13, bg=PANEL, highlightthickness=0)
         self.canvas.grid(row=2, column=0, sticky="ew", padx=12)
-        self.reset = tk.Label(self, text="Carregando…", bg=PANEL, fg=MUTED, font=("Segoe UI", 8), anchor="w")
+        self.reset = tk.Label(self, text="Carregando…", bg=PANEL, fg=MUTED, font=(FONT_FAMILY, 8), anchor="w")
         self.reset.grid(row=3, column=0, sticky="ew", padx=12, pady=(5, 10))
         self.percent: int | None = None
         self.canvas.bind("<Configure>", lambda _event: self._draw())
@@ -799,7 +826,7 @@ class BatteryMeter(tk.Canvas):
                 x = inner_left + (inner_right - inner_left) * fraction
                 self.create_line(x, inner_top, x, inner_bottom, fill=BG, width=3)
         self.create_text((left + right) / 2, (top + bottom) / 2, text=label, fill=TEXT,
-                         font=("Segoe UI", 16, "bold"))
+                         font=(FONT_FAMILY, 16, "bold"))
 
 
 class HoverTooltip:
@@ -844,7 +871,7 @@ class HoverTooltip:
         tip.attributes("-topmost", True)
         label = tk.Label(
             tip, text=self.text, bg="#292d25", fg=TEXT, bd=1, relief="solid",
-            padx=7, pady=4, font=("Segoe UI", 8),
+            padx=7, pady=4, font=(FONT_FAMILY, 8),
         )
         label.pack()
         tip.update_idletasks()
@@ -892,7 +919,7 @@ class SettingsDialog(tk.Toplevel):
             for provider in PROVIDERS
         }
         self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
-        self.start_with_windows_var = tk.BooleanVar(value=self.config["startWithWindows"])
+        self.start_at_login_var = tk.BooleanVar(value=self.config["startAtLogin"])
         self.extra_profiles = [
             dict(item)
             for item in self.config.get("profiles", [])
@@ -901,18 +928,18 @@ class SettingsDialog(tk.Toplevel):
         self._build()
 
     def _label(self, master: tk.Misc, text: str) -> tk.Label:
-        label = tk.Label(master, text=text, bg=BG, fg=TEXT, font=("Segoe UI", 9))
+        label = tk.Label(master, text=text, bg=BG, fg=TEXT, font=(FONT_FAMILY, 9))
         label.pack(anchor="w", pady=(8, 2))
         return label
 
     def _build(self) -> None:
         body = tk.Frame(self, bg=BG)
         body.pack(fill="both", expand=True, padx=16, pady=12)
-        tk.Label(body, text="CONFIGURAÇÕES", bg=BG, fg=TEXT, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(body, text="CONFIGURAÇÕES", bg=BG, fg=TEXT, font=(FONT_FAMILY, 11, "bold")).pack(anchor="w")
         tk.Label(
             body,
             text="Os caminhos são opcionais: em branco, o widget procura a CLI instalada no sistema.",
-            bg=BG, fg=MUTED, justify="left", wraplength=480, font=("Segoe UI", 8),
+            bg=BG, fg=MUTED, justify="left", wraplength=480, font=(FONT_FAMILY, 8),
         ).pack(anchor="w", pady=(3, 5))
 
         providers = tk.Frame(body, bg=BG)
@@ -942,8 +969,8 @@ class SettingsDialog(tk.Toplevel):
 
         tk.Checkbutton(
             body,
-            text="Abrir o widget automaticamente ao iniciar o Windows",
-            variable=self.start_with_windows_var,
+            text="Abrir o widget automaticamente ao iniciar o sistema",
+            variable=self.start_at_login_var,
             bg=BG,
             fg=TEXT,
             selectcolor=PANEL_2,
@@ -954,7 +981,7 @@ class SettingsDialog(tk.Toplevel):
         tk.Label(
             body,
             text="Gemini usa a statusline oficial do AGY. Ao salvar, o widget ativa um coletor local que guarda somente modelo, percentual e renovação.",
-            bg=BG, fg=MUTED, justify="left", wraplength=480, font=("Segoe UI", 8),
+            bg=BG, fg=MUTED, justify="left", wraplength=480, font=(FONT_FAMILY, 8),
         ).pack(anchor="w", pady=(8, 0))
 
         self._label(body, "Perfis adicionais")
@@ -977,11 +1004,11 @@ class SettingsDialog(tk.Toplevel):
     @staticmethod
     def _action_button(master: tk.Misc, text: str, command: Any) -> tk.Button:
         return tk.Button(master, text=text, command=command, bg=PANEL_2, fg=TEXT, activebackground=LINE,
-                         activeforeground=TEXT, bd=0, padx=9, pady=4, font=("Segoe UI", 8), cursor="hand2")
+                         activeforeground=TEXT, bd=0, padx=9, pady=4, font=(FONT_FAMILY, 8), cursor="hand2")
 
     def _choose_executable(self, provider: str) -> None:
         filename = filedialog.askopenfilename(parent=self, title=f"Selecione o executável do {provider.title()}",
-                                              filetypes=[("Executáveis", "*.exe *.cmd"), ("Todos os arquivos", "*.*")])
+                                              filetypes=executable_filetypes())
         if filename:
             self.path_vars[provider].set(filename)
 
@@ -1003,7 +1030,7 @@ class SettingsDialog(tk.Toplevel):
         frame = tk.Frame(dialog, bg=BG)
         frame.pack(padx=14, pady=12)
         for text, variable in (("Provedor (codex ou claude)", provider), ("Nome do perfil", label), ("Pasta de configuração (opcional)", config_dir)):
-            tk.Label(frame, text=text, bg=BG, fg=TEXT, font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 2))
+            tk.Label(frame, text=text, bg=BG, fg=TEXT, font=(FONT_FAMILY, 9)).pack(anchor="w", pady=(6, 2))
             tk.Entry(frame, textvariable=variable, width=48, bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat").pack(ipady=4)
 
         def choose_dir() -> None:
@@ -1049,7 +1076,7 @@ class SettingsDialog(tk.Toplevel):
             messagebox.showerror("Configurações", "O intervalo deve ser um número entre 5 e 120.", parent=self)
             return
         executables = {provider: variable.get().strip() or None for provider, variable in self.path_vars.items()}
-        start_with_windows = self.start_with_windows_var.get()
+        start_at_login = self.start_at_login_var.get()
         profiles = [
             {"id": f"{provider}-default", "provider": provider, "label": "Padrão", "executable": executables[provider], "configDir": None}
             for provider in providers
@@ -1072,13 +1099,13 @@ class SettingsDialog(tk.Toplevel):
                 )
                 return
         try:
-            set_start_with_windows(start_with_windows)
+            set_start_at_login(start_at_login)
         except OSError as exc:
             if integration == "installed":
                 remove_statusline()
             messagebox.showerror(
                 "Inicialização automática",
-                f"Não foi possível atualizar a inicialização do Windows: {exc}",
+                f"Não foi possível atualizar a inicialização automática: {exc}",
                 parent=self,
             )
             return
@@ -1086,13 +1113,13 @@ class SettingsDialog(tk.Toplevel):
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             CONFIG_FILE.write_text(json.dumps({"providers": providers, "refreshMinutes": refresh_minutes,
                                                "layout": self.widget.layout, "executables": executables,
-                                               "profiles": profiles, "startWithWindows": start_with_windows},
+                                               "profiles": profiles, "startAtLogin": start_at_login},
                                                ensure_ascii=False, indent=2), encoding="utf-8")
         except OSError as exc:
             if integration == "installed":
                 remove_statusline()
             try:
-                set_start_with_windows(self.config["startWithWindows"])
+                set_start_at_login(self.config["startAtLogin"])
             except OSError:
                 pass
             messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)
@@ -1201,7 +1228,7 @@ class UsageWidget:
         titlebar = tk.Frame(self.root, bg=PANEL_2, height=42, highlightbackground=LINE, highlightthickness=1)
         titlebar.pack(fill="x")
         titlebar.pack_propagate(False)
-        label = tk.Label(titlebar, text="LIMITES DE IA", bg=PANEL_2, fg=TEXT, font=("Segoe UI", 10, "bold"))
+        label = tk.Label(titlebar, text="LIMITES DE IA", bg=PANEL_2, fg=TEXT, font=(FONT_FAMILY, 10, "bold"))
         label.pack(side="left", padx=12)
         self._button(titlebar, "×", self.close, "Fechar").pack(side="right", padx=(0, 5))
         self.collapse_button = self._button(titlebar, "–", self.toggle_collapse, "Recolher")
@@ -1244,7 +1271,7 @@ class UsageWidget:
                 bg=BG,
                 fg=YELLOW,
                 justify="left",
-                font=("Segoe UI", 9),
+                font=(FONT_FAMILY, 9),
                 wraplength=WINDOW_WIDTH - 40,
             ).pack(anchor="w", pady=16)
             missing = {profile["provider"] for profile, _ in self.unavailable_profiles}
@@ -1296,19 +1323,19 @@ class UsageWidget:
 
         if self.layout == "compact" and self.profiles:
             self.hover_panel = tk.Frame(self.body, bg=PANEL_2, highlightbackground=LINE, highlightthickness=1)
-            self.hover_title = tk.Label(self.hover_panel, bg=PANEL_2, font=("Segoe UI", 9, "bold"), anchor="w")
+            self.hover_title = tk.Label(self.hover_panel, bg=PANEL_2, font=(FONT_FAMILY, 9, "bold"), anchor="w")
             self.hover_title.pack(fill="x", padx=10, pady=(8, 2))
             self.hover_window = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
-                                         font=("Segoe UI", 8, "bold"), anchor="w")
+                                         font=(FONT_FAMILY, 8, "bold"), anchor="w")
             self.hover_window.pack(fill="x", padx=10)
             self.hover_value = tk.Label(self.hover_panel, bg=PANEL_2, fg=TEXT,
-                                        font=("Segoe UI", 15, "bold"), anchor="w")
+                                        font=(FONT_FAMILY, 15, "bold"), anchor="w")
             self.hover_value.pack(fill="x", padx=10, pady=(1, 2))
             self.hover_reset = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
-                                        font=("Segoe UI", 8), anchor="w")
+                                        font=(FONT_FAMILY, 8), anchor="w")
             self.hover_reset.pack(fill="x", padx=10)
             self.hover_updated = tk.Label(self.hover_panel, bg=PANEL_2, fg=MUTED,
-                                          font=("Segoe UI", 8), anchor="w")
+                                          font=(FONT_FAMILY, 8), anchor="w")
             self.hover_updated.pack(fill="x", padx=10, pady=(2, 8))
             for child in (self.hover_panel, *self.hover_panel.winfo_children()):
                 child.bind("<Enter>", lambda _event: self._cancel_hide_hover_timer())
@@ -1316,7 +1343,7 @@ class UsageWidget:
 
         status_text = "Conectando…" if self.profiles else "Aguardando uma CLI disponível"
         status_color = MUTED if self.profiles else YELLOW
-        self.status = tk.Label(self.body, text=status_text, bg=BG, fg=status_color, font=("Segoe UI", 8), anchor="w")
+        self.status = tk.Label(self.body, text=status_text, bg=BG, fg=status_color, font=(FONT_FAMILY, 8), anchor="w")
         if self.layout != "compact":
             self.status.pack(fill="x", pady=(12, 0))
         self.last_updated = tk.Label(
@@ -1324,7 +1351,7 @@ class UsageWidget:
             text="Última atualização: —",
             bg=BG,
             fg="#62685b",
-            font=("Segoe UI", 8),
+            font=(FONT_FAMILY, 8),
             anchor="w",
         )
         if self.layout != "compact":
@@ -1333,7 +1360,7 @@ class UsageWidget:
     def _action_button(self, master: tk.Misc, text: str, command: Any) -> tk.Button:
         return tk.Button(
             master, text=text, command=command, bg=PANEL_2, fg=TEXT, activebackground=LINE, activeforeground=TEXT,
-            bd=0, padx=9, pady=4, font=("Segoe UI", 8), cursor="hand2"
+            bd=0, padx=9, pady=4, font=(FONT_FAMILY, 8), cursor="hand2"
         )
 
     def _button(self, master: tk.Misc, text: str, command: Any, tooltip: str) -> tk.Button:
@@ -1347,7 +1374,7 @@ class UsageWidget:
             activeforeground=TEXT,
             bd=0,
             width=3,
-            font=("Segoe UI Symbol", 10),
+            font=(SYMBOL_FONT_FAMILY, 10),
             cursor="hand2",
         )
         self.button_tooltips[button] = HoverTooltip(button, tooltip)
@@ -1357,8 +1384,8 @@ class UsageWidget:
         row = tk.Frame(self.body, bg=BG)
         row.pack(fill="x", pady=(8, 5))
         tk.Frame(row, bg=accent, width=4, height=13).pack(side="left", padx=(0, 7))
-        tk.Label(row, text=text, bg=BG, fg=accent, font=("Segoe UI", 9, "bold")).pack(side="left")
-        tk.Label(row, text=f"  /  {company}", bg=BG, fg=MUTED, font=("Segoe UI", 8)).pack(side="left")
+        tk.Label(row, text=text, bg=BG, fg=accent, font=(FONT_FAMILY, 9, "bold")).pack(side="left")
+        tk.Label(row, text=f"  /  {company}", bg=BG, fg=MUTED, font=(FONT_FAMILY, 8)).pack(side="left")
 
     def _start_drag(self, event: tk.Event) -> None:
         self.drag_origin = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
@@ -1541,11 +1568,8 @@ class UsageWidget:
     def copy_diagnostics(self) -> None:
         """Copia informações úteis de suporte, deliberadamente sem IDs ou credenciais."""
         cli: dict[str, dict[str, Any]] = {}
-        for provider, commands in {
-            "codex": ("codex.exe", "codex.cmd", "codex"),
-            "claude": ("claude.exe", "claude.cmd", "claude"),
-            "gemini": ("agy.exe", "agy.cmd", "agy"),
-        }.items():
+        for provider in PROVIDERS:
+            commands = provider_commands(provider)
             executable = configured_executable(self.config["executables"].get(provider), commands)
             info: dict[str, Any] = {"encontrado": bool(executable)}
             if executable:
