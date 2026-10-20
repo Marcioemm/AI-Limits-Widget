@@ -1,2 +1,2 @@
-# Ferramentas usadas somente para gerar o pacote distribuível do Windows.
+# Ferramentas usadas para gerar os pacotes distribuíveis de Windows e Linux.
 pyinstaller==6.22.3

@@ -1,0 +1,12 @@
+Package: ai-limits-widget
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: @ARCHITECTURE@
+Depends: libc6 (>= 2.39), libfontconfig1, libx11-6, libxft2, libxrender1
+Installed-Size: @INSTALLED_SIZE@
+Maintainer: Marcio Emmanuel <Marcioemm@users.noreply.github.com>
+Homepage: https://github.com/Marcioemm/AI-Limits-Widget
+Description: widget local para acompanhar limites de uso de IA
+ Exibe os limites restantes do Codex, Claude Code e Gemini pelo AGY sem
+ armazenar credenciais nem enviar dados para servidores deste projeto.

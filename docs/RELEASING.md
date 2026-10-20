@@ -1,5 +1,7 @@
 # Gerando o instalador Windows
 
+Para o pacote Ubuntu, consulte [RELEASING_LINUX.md](RELEASING_LINUX.md).
+
 O instalador é gerado apenas no Windows e não inclui credenciais nem os CLIs do
 Codex ou Claude Code. Esses programas continuam sendo detectados no perfil local
 da pessoa usuária quando o widget é aberto.
@@ -55,5 +57,5 @@ Trabalho, além de criar um desinstalador.
 5. Inclua nas notas de versão que Codex CLI e Claude Code são opcionais e devem
    ser instalados/autenticados separadamente.
 
-O próximo passo será automatizar essas etapas em GitHub Actions quando o build
-manual estiver validado.
+O instalador Windows permanece manual. O pacote Ubuntu é automatizado pelo
+workflow **Build Ubuntu**, descrito em [RELEASING_LINUX.md](RELEASING_LINUX.md).
