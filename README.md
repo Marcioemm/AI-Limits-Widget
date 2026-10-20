@@ -2,27 +2,29 @@
 
 [🇺🇸 English](.github/readme/README.en.md) · [🇪🇸 Español](.github/readme/README.es.md) · 🇧🇷 Português
 
-Widget leve para Windows que exibe, na área de trabalho, os limites de uso
-restantes do Codex, Claude Code e Gemini pelo AGY.
+Um widget leve para Windows que deixa, na área de trabalho, uma visão simples
+dos limites de uso restantes do Codex, Claude Code e Gemini pelo AGY.
 
-> O projeto é independente e não é afiliado, aprovado ou mantido pela OpenAI
+> Este é um projeto independente. Ele não é afiliado, aprovado nem mantido por
 > OpenAI, Anthropic ou Google.
 
 ## O que ele faz
 
-- Mostra percentuais restantes de janelas de uso, em vez de inventar uma
-  conversão para “tokens restantes”.
-- Atualiza Codex, Claude Code e o cache do Gemini em intervalos configurados (o padrão é 5 minutos).
-- Funciona localmente e mantém o widget sempre visível, se desejado.
-- Preserva o último dado válido do Claude durante um bloqueio temporário.
-- Indica sessão expirada, ferramenta ausente e indisponibilidade de forma clara.
+- Mostra o percentual restante de cada janela de uso, sem inventar uma
+  equivalência para “tokens restantes”.
+- Atualiza Codex, Claude Code e o cache do Gemini no intervalo que você escolher
+  (cinco minutos por padrão).
+- Roda localmente e pode ficar sempre visível, se isso ajudar no seu fluxo.
+- Mantém o último dado válido do Claude durante um bloqueio temporário.
+- Explica de forma clara quando uma sessão expirou, uma ferramenta está ausente
+  ou um serviço não está disponível.
 
 ## O que ele não faz
 
-- Não cria, aumenta ou contorna limites de contas.
-- Não envia dados a um servidor deste projeto.
-- Não armazena senhas, chaves de API ou tokens de autenticação.
-- Não exige uma assinatura além das contas que cada pessoa já usa.
+- Não cria, aumenta nem contorna limites de contas.
+- Não envia seus dados para servidores deste projeto.
+- Não guarda senhas, chaves de API ou tokens de autenticação.
+- Não exige nenhuma assinatura além das contas que você já usa.
 
 ## Requisitos
 
@@ -32,30 +34,29 @@ restantes do Codex, Claude Code e Gemini pelo AGY.
 - Opcional: Claude Code autenticado, para exibir Claude Code.
 - Opcional: Antigravity CLI (`agy`) autenticado, para exibir o modelo Gemini ativo.
 
-Instale apenas as integrações que você pretende usar. Se uma CLI não estiver
-instalada ou autenticada, o widget continuará funcionando e mostrará o motivo
-na respectiva seção.
+Instale apenas o que você pretende usar. Se alguma CLI não estiver instalada ou
+autenticada, o widget continua abrindo e mostra o motivo na seção correspondente.
 
 ## Instalação pelo instalador
 
 Baixe `AI-Limits-Widget-Setup-<versão>.exe` na página de
-[Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases), execute-o e
-opte pelo atalho na Área de Trabalho se desejar. O instalador inclui o runtime
-necessário para o widget; Python não é necessário para usá-lo.
+[Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases) e execute-o.
+Você pode criar um atalho na Área de Trabalho durante a instalação. O instalador
+já inclui o necessário para rodar o widget — não é preciso instalar Python.
 
-O Codex CLI, o Claude Code e o Antigravity CLI (`agy`) continuam opcionais e precisam estar instalados e
-autenticados na mesma conta do Windows para que seus limites apareçam. O
-instalador não copia nem solicita credenciais.
+Codex CLI, Claude Code e Antigravity CLI (`agy`) continuam opcionais. Para que
+os limites apareçam, instale e autentique cada um na mesma conta do Windows.
+O instalador não copia nem pede suas credenciais.
 
-O aplicativo desktop do Codex, por si só, não fornece a integração local usada
-pelo widget: instale também o [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
-para monitorar seus limites. Para Claude, siga a instalação oficial do
+O aplicativo desktop do Codex sozinho não oferece a integração local usada pelo
+widget. Instale também o [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
+para acompanhar seus limites. Para Claude, siga a instalação oficial do
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started).
 Para Gemini, instale o [Antigravity CLI](https://antigravity.google/docs/cli/)
 e marque **Gemini (AGY)** nas configurações. O widget ativa uma statusline local
-que recebe a cota oficial do modelo Gemini ativo.
-Se nenhuma CLI estiver disponível, o widget mostra os links de instalação e o
-botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
+para ler a cota oficial do modelo Gemini ativo. Se nenhuma CLI estiver
+disponível, ele mostra os links de instalação e o botão **Verificar novamente**;
+não é necessário reiniciar o aplicativo.
 
 ## Instalação pelo código-fonte
 
@@ -72,9 +73,9 @@ botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
    .\scripts\start.ps1
    ```
 
-   Abra **⚙ Configurações** no widget para escolher os provedores, alterar o
-   intervalo, indicar um executável fora do `PATH` e cadastrar perfis extras.
-   Nenhuma credencial é pedida ou salva.
+   Abra **⚙ Configurações** para escolher os provedores, ajustar o intervalo,
+   indicar um executável fora do `PATH`, cadastrar perfis extras e decidir se o
+   widget deve abrir junto com o Windows. Nenhuma credencial é pedida ou salva.
 
 3. Para encerrar apenas este widget:
 
@@ -82,10 +83,10 @@ botão **Verificar novamente**; não é necessário reiniciar o aplicativo.
    .\scripts\stop.ps1
    ```
 
-O widget pode ser arrastado pela barra superior e possui
-botões para atualizar/verificar novamente, abrir configurações, copiar um
-diagnóstico seguro, fixar, recolher e encerrar. Deixe o cursor sobre qualquer
-ícone da barra para ver uma descrição rápida da ação.
+Arraste o widget pela barra superior. Nela você também encontra botões para
+atualizar ou verificar novamente, abrir as configurações, copiar um diagnóstico
+seguro, fixar, recolher e encerrar. Passe o cursor sobre qualquer ícone para ver
+o que ele faz.
 
 Use o botão de layout (`⊟`/`⊞`) ao lado do título **LIMITES DE IA** para
 alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
@@ -163,18 +164,18 @@ ajustes quando elas mudarem.
 
 ## Privacidade e segurança
 
-O aplicativo consulta somente processos e serviços necessários aos provedores
-ativados. Não há analytics, banco de dados remoto nem envio de credenciais para
-este repositório. Os dados locais ficam em
-`%LOCALAPPDATA%\LimitesIA` e contêm apenas preferências, percentuais e
-horários de atualização. No caso do AGY, o cache sanitizado não contém e-mail,
-conversa, diretório de trabalho ou token.
+O aplicativo consulta apenas os processos e serviços necessários para os
+provedores que você ativou. Não há analytics, banco de dados remoto nem envio de
+credenciais para este repositório. Os dados ficam no seu computador, em
+`%LOCALAPPDATA%\LimitesIA`, e contêm somente preferências, percentuais e
+horários de atualização. No caso do AGY, o cache sanitizado não inclui e-mail,
+conversa, diretório de trabalho nem token.
 
-Antes de abrir uma issue, leia [SECURITY.md](SECURITY.md). Nunca envie arquivos
-de autenticação, tokens, logs completos ou capturas com informações privadas.
-O botão `?` do widget copia um diagnóstico que contém somente versões das CLIs,
-configuração de atualização e quais janelas foram disponibilizadas; não inclui
-tokens, IDs de conta ou caminhos locais.
+Antes de abrir uma issue, leia [SECURITY.md](SECURITY.md). Não envie arquivos de
+autenticação, tokens, logs completos ou capturas com informações privadas. O
+botão `?` copia um diagnóstico seguro: versões das CLIs, configuração de
+atualização e janelas disponíveis. Ele não inclui tokens, IDs de conta ou
+caminhos locais.
 
 ## Diagnóstico
 
