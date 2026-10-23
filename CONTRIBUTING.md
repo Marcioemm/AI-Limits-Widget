@@ -18,10 +18,26 @@ dados pessoais. Para vulnerabilidades, siga [SECURITY.md](SECURITY.md).
 3. Execute a validação local:
 
    ```powershell
-   python -m pip install --editable .
-   python -m compileall .\src
-   python -m unittest discover -s .\tests -v
+   python -m pip install -e ".[dev]"
+   python -m compileall -q .\src .\tests
+   python -m ruff check .\src .\tests
+   python -m ruff format --check .\src .\tests
+   python -m mypy
+   python -m coverage run -m unittest discover -s .\tests -v
+   python -m coverage report
    ```
+
+   Os testes comuns incluem as regras puras da Ilha Dinâmica e não precisam
+   abrir janelas. Para executar também o smoke gráfico no Windows:
+
+   ```powershell
+   $env:AI_LIMITS_RUN_TK_SMOKE = '1'
+   python -m unittest tests.test_circular_meter -v
+   Remove-Item Env:AI_LIMITS_RUN_TK_SMOKE
+   ```
+
+   O relatório exige cobertura total mínima de 30%. Esse piso inicial deve
+   crescer junto com os testes e não pode ser reduzido para contornar falhas.
 
 4. Faça commits claros e assine-os com o DCO:
 

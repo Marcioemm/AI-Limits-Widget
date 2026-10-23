@@ -11,9 +11,11 @@ import time
 from typing import Any
 
 try:
-    from .platform_support import cache_dir as platform_cache_dir, is_windows, quote_command
+    from .platform_support import cache_dir as platform_cache_dir
+    from .platform_support import is_windows, quote_command
 except ImportError:  # Execução direta pelo bridge durante desenvolvimento.
-    from platform_support import cache_dir as platform_cache_dir, is_windows, quote_command
+    from platform_support import cache_dir as platform_cache_dir
+    from platform_support import is_windows, quote_command
 
 BRIDGE_EXE_NAME = "AI Limits AGY Bridge.exe"
 BRIDGE_POSIX_NAME = "ai-limits-agy-bridge"
@@ -48,11 +50,7 @@ def is_our_bridge(command: Any) -> bool:
     if not isinstance(command, str):
         return False
     lowered = command.lower()
-    return (
-        "ai limits agy bridge" in lowered
-        or "ai-limits-agy-bridge" in lowered
-        or "agy_bridge.py" in lowered
-    )
+    return "ai limits agy bridge" in lowered or "ai-limits-agy-bridge" in lowered or "agy_bridge.py" in lowered
 
 
 def statusline_state(path: pathlib.Path | None = None) -> str:
@@ -203,38 +201,3 @@ def save_statusline_payload(
     target.parent.mkdir(parents=True, exist_ok=True)
     _atomic_json_write(target, sanitized)
     return True
-
-
-class AgyClient:
-    """Lê apenas o cache sanitizado produzido pela statusline oficial."""
-
-    def __init__(self, path: pathlib.Path | None = None) -> None:
-        self.path = path or cache_file()
-
-    def read_limits(self) -> dict[str, Any]:
-        try:
-            cached = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError as exc:
-            raise RuntimeError("Abra o AGY uma vez para receber a cota do modelo Gemini ativo.") from exc
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("A última cota recebida do AGY não pôde ser lida.") from exc
-        model = cached.get("model") if isinstance(cached, dict) else None
-        quota = cached.get("quota") if isinstance(cached, dict) else None
-        if not isinstance(model, dict) or not isinstance(quota, dict):
-            raise RuntimeError("A última cota recebida do AGY é inválida.")
-        try:
-            remaining_fraction = max(0.0, min(1.0, float(quota["remainingFraction"])))
-            captured_at = float(cached.get("capturedAt", 0))
-        except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError("A última cota recebida do AGY é inválida.") from exc
-        return {
-            "model": str(model.get("displayName") or model.get("id") or "Gemini"),
-            "weekly": {
-                "usedPercent": (1.0 - remaining_fraction) * 100.0,
-                "resetsAt": quota.get("resetTime"),
-                "windowDurationMins": 7 * 24 * 60,
-                "modelName": str(model.get("displayName") or model.get("id") or "Gemini"),
-                "fetchedAt": captured_at,
-            },
-            "fetchedAt": captured_at,
-        }

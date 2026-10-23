@@ -111,14 +111,23 @@ o que ele faz.
 
 Use o botão de layout (`⊟`/`⊞`) ao lado do título **LIMITES DE IA** para
 alternar entre **Cartões** e **Compacto**. A escolha é salva somente neste
-computador. No modo compacto, cada perfil aparece como uma bateria segmentada,
-com células de carga e o percentual dentro; são exibidas até duas baterias por
-linha. Ela representa a janela de 5 horas e, quando essa janela não é fornecida
-pela CLI, representa a janela semanal. O modo compacto não mostra rodapé ou
-horário de atualização.
-Deixe o cursor por um segundo sobre uma bateria para expandir o widget e ver
-rapidamente o perfil, a janela acompanhada, a renovação e a última atualização,
-sem fazer uma nova consulta.
+computador. No modo compacto, o widget vira uma pequena pílula e mostra somente
+uma bateria horizontal com o indicador principal escolhido em **Configurações**.
+Ela possui cinco segmentos e representa a janela
+de 5 horas e, quando essa janela não é fornecida pela CLI, representa a janela
+semanal.
+Também é possível escolher entre uma e três baterias visíveis na pílula
+reduzida. A principal aparece primeiro e as demais são posicionadas ao lado.
+Mantenha o cursor sobre a pílula para revelar as outras baterias. Ao passar
+sobre a pílula, cada bateria mostra logo abaixo dela o perfil, a janela
+acompanhada e a renovação, em linhas alinhadas, sem fazer uma nova consulta.
+A ilha expande e recolhe suavemente, mantendo a largura e o tamanho das
+baterias durante toda a transição. Perto do rodapé do monitor, ela detecta a
+área útil disponível, mantém as baterias no lugar e revela os detalhes acima
+delas para evitar cortes.
+Arraste pela própria
+pílula e use o botão direito para mostrar os cartões, atualizar, configurar,
+fixar ou fechar o widget.
 
 O widget sempre inicia no monitor principal. Ele pode ser movido livremente
 durante o uso, mas volta ao monitor principal na próxima abertura.

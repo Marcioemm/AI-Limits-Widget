@@ -9,6 +9,10 @@ venv/
 build/
 dist/
 *.spec
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
 
 # Local application data and diagnostics
 .env

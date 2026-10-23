@@ -5,8 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ai_limits_widget import app
-
+from ai_limits_widget import app, config
 
 RUN_TK_SMOKE = os.environ.get("AI_LIMITS_RUN_TK_SMOKE") == "1"
 
@@ -30,7 +29,7 @@ class TkSmokeTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.object(app, "CONFIG_FILE", config_file):
+            with patch.object(config, "CONFIG_FILE", config_file):
                 widget = app.UsageWidget()
                 try:
                     widget.root.update_idletasks()

@@ -10,7 +10,6 @@ import sys
 from collections.abc import Mapping
 from typing import Any
 
-
 APP_SLUG = "ai-limits-widget"
 WINDOWS_APP_DIR = "LimitesIA"
 WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
