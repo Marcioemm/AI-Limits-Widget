@@ -3,7 +3,7 @@
 [🇺🇸 English](.github/readme/README.en.md) · [🇪🇸 Español](.github/readme/README.es.md) · 🇧🇷 Português
 
 Um widget leve para Windows e Ubuntu que deixa, na área de trabalho, uma visão simples
-dos limites de uso restantes do Codex, Claude Code e Gemini pelo AGY.
+dos limites de uso restantes do Codex, Claude Code, Gemini pelo AGY e Grok.
 
 > Este é um projeto independente. Ele não é afiliado, aprovado nem mantido por
 > OpenAI, Anthropic ou Google.
@@ -183,14 +183,22 @@ tentativa é agendada automaticamente.
 
 ### Gemini pelo Antigravity CLI
 
-O widget usa a integração oficial de statusline do AGY. O JSON recebido contém
+Se já existe uma sessão do AGY, o widget consulta a cota ao vivo (janelas de 5 horas e semana) e não grava o token. Se a consulta falhar, cai no cache da statusline. O widget usa a integração oficial de statusline do AGY. O JSON recebido contém
 vários dados de sessão, mas o coletor descarta tudo, exceto o nome do modelo
 Gemini ativo, o percentual semanal, a renovação e o horário da coleta. Se o
 modelo ativo no AGY for Claude ou GPT, ele é ignorado e não substitui o último
 Gemini conhecido. Uma statusline personalizada já existente nunca é
 sobrescrita automaticamente. Depois da ativação, abra o AGY ao menos uma vez;
 enquanto ele estiver em uso, o cache é atualizado sem consumir uma solicitação
-de modelo adicional.
+de modelo adicional. Uma statusline de terceiro só impede salvar se não houver
+sessão nem cache.
+
+### Grok
+
+Se `~/.grok/auth.json` (ou `$GROK_HOME/auth.json`) já tiver uma sessão válida, o
+cartão do Grok aparece sem marcar nada nas configurações. A consulta usa o token
+já gravado pelo `grok login` e mostra a piscina semanal. O widget não inicia um
+login próprio e não grava a chave.
 
 As integrações dependem das interfaces oferecidas pelas CLIs e podem exigir
 ajustes quando elas mudarem.

@@ -1,4 +1,4 @@
-"""Widget nativo para acompanhar limites do Codex, Claude Code e Gemini."""
+"""Widget nativo para acompanhar limites do Codex, Claude Code, Gemini e Grok."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Any
 
 try:
     from ..config import load_config, save_config
-    from ..models import AppConfig, Profile, RateLimitWindow
+    from ..models import PROVIDERS, AppConfig, Profile, RateLimitWindow
     from ..profiles import load_profiles, profile_is_available, profile_unavailable_reason
     from ..providers import (
         LimitsProvider,
@@ -25,7 +25,7 @@ try:
     )
 except ImportError:  # Execução direta por scripts/start.ps1.
     from config import load_config, save_config
-    from models import AppConfig, Profile, RateLimitWindow
+    from models import PROVIDERS, AppConfig, Profile, RateLimitWindow
     from profiles import load_profiles, profile_is_available, profile_unavailable_reason
     from providers import (
         LimitsProvider,
@@ -60,6 +60,7 @@ from .theme import (
 CODEX_CLI_DOCS = "https://learn.chatgpt.com/docs/codex/cli"
 CLAUDE_CODE_DOCS = "https://docs.anthropic.com/en/docs/claude-code/getting-started"
 AGY_DOCS = "https://antigravity.google/docs/cli/"
+GROK_DOCS = "https://docs.x.ai/build/overview"
 
 
 class UsageWidget(DynamicIslandMixin):
@@ -250,6 +251,12 @@ class UsageWidget(DynamicIslandMixin):
                 self._action_button(actions, "Instalar AGY", lambda: webbrowser.open(AGY_DOCS)).pack(
                     side="left", padx=(6, 0)
                 )
+            if "grok" in missing and not configured_executable(
+                self.config["executables"].get("grok"), provider_commands("grok")
+            ):
+                self._action_button(actions, "Instalar Grok", lambda: webbrowser.open(GROK_DOCS)).pack(
+                    side="left", padx=(6, 0)
+                )
             self._action_button(self.body, "Verificar novamente", self.rescan_integrations).pack(
                 anchor="w", pady=(2, 0)
             )
@@ -344,12 +351,13 @@ class UsageWidget(DynamicIslandMixin):
                 grid.pack(fill="x")
                 grid.columnconfigure(0, weight=1, uniform="meters")
                 grid.columnconfigure(1, weight=1, uniform="meters")
-                short = Meter(grid, "Modelo ativo" if profile["provider"] == "gemini" else "5 horas", accent)
-                short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-                if profile["provider"] == "gemini":
-                    short.grid_configure(columnspan=2, padx=0)
+                if profile["provider"] == "grok":
+                    short = Meter(grid, "Semana", accent)
+                    short.grid(row=0, column=0, columnspan=2, sticky="ew")
                     week = None
                 else:
+                    short = Meter(grid, "5 horas", accent)
+                    short.grid(row=0, column=0, sticky="ew", padx=(0, 4))
                     week = Meter(grid, "Semana", accent)
                     week.grid(row=0, column=1, sticky="ew", padx=(4, 0))
             self.meters[profile["id"]] = (short, week)
@@ -513,11 +521,8 @@ class UsageWidget(DynamicIslandMixin):
     def copy_diagnostics(self) -> None:
         """Copia informações úteis de suporte, deliberadamente sem IDs ou credenciais."""
         cli: dict[str, dict[str, Any]] = {}
-        for provider, commands in {
-            "codex": ("codex.exe", "codex.cmd", "codex"),
-            "claude": ("claude.exe", "claude.cmd", "claude"),
-            "gemini": ("agy.exe", "agy.cmd", "agy"),
-        }.items():
+        for provider in PROVIDERS:
+            commands = provider_commands(provider)
             executable = configured_executable(self.config["executables"].get(provider), commands)
             info: dict[str, Any] = {"encontrado": bool(executable)}
             if executable:
@@ -660,10 +665,8 @@ class UsageWidget(DynamicIslandMixin):
                 )
             self._render_compact_detail(profile)
             return
-        if profile["provider"] == "gemini":
-            self._update_meter(short, second)
-            model_name = str((second or {}).get("modelName") or "Gemini")
-            short.title.configure(text=model_name.upper()[:42])
+        if profile["provider"] == "grok":
+            self._update_meter(short, second or first)
             return
         self._update_meter(short, first)
         if week:

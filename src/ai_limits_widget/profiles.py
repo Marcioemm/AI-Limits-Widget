@@ -7,15 +7,19 @@ import os
 import pathlib
 
 try:
-    from .agy_integration import statusline_state
-    from .config import load_config
+    from .agy_integration import cache_file, statusline_state
+    from .config import CONFIG_FILE, load_config, raw_config_mentions
     from .models import Profile
     from .providers import configured_executable, provider_commands
+    from .providers.gemini import gemini_has_session
+    from .providers.grok import grok_account_label, grok_auth_file, grok_has_session
 except ImportError:  # Execução direta de app.py.
-    from agy_integration import statusline_state
-    from config import load_config
+    from agy_integration import cache_file, statusline_state
+    from config import CONFIG_FILE, load_config, raw_config_mentions
     from models import Profile
     from providers import configured_executable, provider_commands
+    from providers.gemini import gemini_has_session
+    from providers.grok import grok_account_label, grok_auth_file, grok_has_session
 
 
 def claude_account_email(config_dir: pathlib.Path, is_default: bool) -> str | None:
@@ -70,30 +74,56 @@ def discover_claude_profiles(executable: str | None) -> list[Profile]:
     return profiles
 
 
+def discover_grok_profiles(executable: str | None) -> list[Profile]:
+    """Encontra a sessão do Grok em ~/.grok ou GROK_HOME, sem copiar a chave."""
+    auth_file = grok_auth_file()
+    if auth_file is None or not grok_has_session(str(auth_file.parent)):
+        return []
+    return [
+        {
+            "id": "grok-default",
+            "provider": "grok",
+            "label": grok_account_label(str(auth_file.parent)) or "Padrão",
+            "executable": executable,
+            "configDir": str(auth_file.parent),
+        }
+    ]
+
+
 def load_profiles() -> list[Profile]:
     """Carrega perfis configurados e converte a configuração antiga quando necessário."""
     config = load_config()
     if config["profiles"]:
-        return [profile.copy() for profile in config["profiles"]]
+        profiles = [profile.copy() for profile in config["profiles"]]
+    else:
+        profiles = []
+        executables = config["executables"]
+        for provider in config["providers"]:
+            if provider == "claude":
+                discovered = discover_claude_profiles(executables.get(provider))
+                if discovered:
+                    profiles.extend(discovered)
+                    continue
+            profiles.append(
+                {
+                    "id": f"{provider}-default",
+                    "provider": provider,
+                    "label": "Padrão",
+                    "executable": executables.get(provider),
+                    "configDir": None,
+                }
+            )
+    return _merge_discovered_grok(profiles, config["executables"].get("grok"))
 
-    profiles: list[Profile] = []
-    executables = config["executables"]
-    for provider in config["providers"]:
-        if provider == "claude":
-            discovered = discover_claude_profiles(executables.get(provider))
-            if discovered:
-                profiles.extend(discovered)
-                continue
-        profiles.append(
-            {
-                "id": f"{provider}-default",
-                "provider": provider,
-                "label": "Padrão",
-                "executable": executables.get(provider),
-                "configDir": None,
-            }
-        )
-    return profiles
+
+def _merge_discovered_grok(profiles: list[Profile], executable: str | None) -> list[Profile]:
+    """Inclui o Grok só enquanto o JSON salvo nunca citou o provedor."""
+    if any(profile["provider"] == "grok" for profile in profiles):
+        return profiles
+    if raw_config_mentions("grok", CONFIG_FILE):
+        return profiles
+    discovered = discover_grok_profiles(executable)
+    return [*profiles, *discovered] if discovered else profiles
 
 
 def profile_is_available(profile: Profile) -> bool:
@@ -104,7 +134,16 @@ def profile_unavailable_reason(profile: Profile) -> str | None:
     provider = profile["provider"]
     executable = profile.get("executable")
     commands = provider_commands(provider)
-    if not configured_executable(executable, commands):
+    has_executable = configured_executable(executable, commands) is not None
+    if provider == "grok":
+        if grok_has_session(profile.get("configDir")):
+            return None
+        if not has_executable:
+            return "Grok CLI não encontrado"
+        return 'Execute "grok login".'
+    if provider == "gemini" and (gemini_has_session() or cache_file().is_file()):
+        return None
+    if not has_executable:
         if provider == "codex":
             return "Codex CLI não encontrado. Instale-o e entre com sua conta ChatGPT."
         if provider == "claude":
