@@ -5,17 +5,25 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
 import time
 from typing import Any
 
+try:
+    from .platform_support import cache_dir as platform_cache_dir
+    from .platform_support import is_windows, quote_command
+except ImportError:  # Execução direta pelo bridge durante desenvolvimento.
+    from platform_support import cache_dir as platform_cache_dir
+    from platform_support import is_windows, quote_command
+
 BRIDGE_EXE_NAME = "AI Limits AGY Bridge.exe"
+BRIDGE_POSIX_NAME = "ai-limits-agy-bridge"
 
 
 def app_data_dir() -> pathlib.Path:
-    return pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
+    """Compatibilidade: os dados sanitizados do AGY agora vivem no cache da plataforma."""
+    return platform_cache_dir()
 
 
 def cache_file() -> pathlib.Path:
@@ -29,19 +37,20 @@ def settings_file() -> pathlib.Path:
 def bridge_command() -> str:
     """Retorna o comando persistente que o AGY chamará como statusline."""
     if getattr(sys, "frozen", False):
-        executable = pathlib.Path(sys.executable).with_name(BRIDGE_EXE_NAME)
+        bridge_name = BRIDGE_EXE_NAME if is_windows() else BRIDGE_POSIX_NAME
+        executable = pathlib.Path(sys.executable).with_name(bridge_name)
         parts = [str(executable)]
     else:
         bridge = pathlib.Path(__file__).with_name("agy_bridge.py").resolve()
         parts = [sys.executable, str(bridge)]
-    return subprocess.list2cmdline(parts)
+    return quote_command(parts)
 
 
 def is_our_bridge(command: Any) -> bool:
     if not isinstance(command, str):
         return False
     lowered = command.lower()
-    return "ai limits agy bridge.exe" in lowered or "agy_bridge.py" in lowered
+    return "ai limits agy bridge" in lowered or "ai-limits-agy-bridge" in lowered or "agy_bridge.py" in lowered
 
 
 def statusline_state(path: pathlib.Path | None = None) -> str:

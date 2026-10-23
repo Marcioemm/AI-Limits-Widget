@@ -6,6 +6,11 @@ import pathlib
 import sys
 from typing import Any
 
+try:
+    from .platform_support import set_start_at_login as platform_set_start_at_login
+except ImportError:  # Execução direta por scripts/start.ps1.
+    from platform_support import set_start_at_login as platform_set_start_at_login
+
 winreg: Any
 try:
     import winreg as _winreg
@@ -39,3 +44,8 @@ def set_start_with_windows(enabled: bool) -> None:
             winreg.DeleteValue(key, WINDOWS_RUN_VALUE)
         except FileNotFoundError:
             pass
+
+
+def set_start_at_login(enabled: bool) -> None:
+    """Ativa a inicialização automática na plataforma em uso."""
+    platform_set_start_at_login(enabled, startup_command(), registry=winreg)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 from typing import Protocol
@@ -38,6 +39,8 @@ class LimitsProvider(Protocol):
 
 
 def provider_commands(provider: ProviderName) -> tuple[str, ...]:
+    if os.name != "nt":
+        return {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",)}[provider]
     return PROVIDER_COMMANDS[provider]
 
 

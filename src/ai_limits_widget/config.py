@@ -11,11 +11,13 @@ from typing import Any, cast
 
 try:
     from .models import PROVIDERS, AppConfig, LayoutName, Profile, ProviderName
+    from .platform_support import config_dir
 except ImportError:  # Execução direta por scripts/start.ps1.
     from models import PROVIDERS, AppConfig, LayoutName, Profile, ProviderName
+    from platform_support import config_dir
 
 
-APP_DATA_DIR = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home())) / "LimitesIA"
+APP_DATA_DIR = config_dir()
 CONFIG_FILE = APP_DATA_DIR / "config.json"
 
 
@@ -71,7 +73,10 @@ def normalize_config(value: Any) -> AppConfig:
         config["compactVisibleCount"] = max(1, min(3, int(value.get("compactVisibleCount", 1))))
     except (TypeError, ValueError):
         pass
-    if isinstance(value.get("startWithWindows"), bool):
+    start_at_login = value.get("startAtLogin")
+    if isinstance(start_at_login, bool):
+        config["startWithWindows"] = start_at_login
+    elif isinstance(value.get("startWithWindows"), bool):
         config["startWithWindows"] = value["startWithWindows"]
 
     executables = value.get("executables")

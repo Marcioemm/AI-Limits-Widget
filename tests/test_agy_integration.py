@@ -6,6 +6,7 @@ import unittest
 from ai_limits_widget.agy_integration import (
     extract_gemini_quota,
     install_statusline,
+    is_our_bridge,
     remove_statusline,
     save_statusline_payload,
     statusline_state,
@@ -55,6 +56,10 @@ class AgyQuotaTests(unittest.TestCase):
 
 
 class AgySettingsTests(unittest.TestCase):
+    def test_recognizes_windows_and_linux_bridge_names(self) -> None:
+        self.assertTrue(is_our_bridge(r'"C:\App\AI Limits AGY Bridge.exe"'))
+        self.assertTrue(is_our_bridge("/usr/lib/ai-limits-widget/ai-limits-agy-bridge"))
+
     def test_installs_and_removes_only_our_statusline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "settings.json"

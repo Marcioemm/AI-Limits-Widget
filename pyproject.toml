@@ -13,8 +13,10 @@ authors = [{ name = "Marcio Emmanuel" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Win32 (MS Windows)",
+  "Environment :: X11 Applications",
   "License :: OSI Approved :: MIT License",
   "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
   "Topic :: Utilities",
 ]

@@ -11,12 +11,12 @@ try:
     from ..agy_integration import bridge_command, install_statusline, remove_statusline
     from ..config import save_config
     from ..models import PROVIDERS, AppConfig, Profile
-    from ..startup import set_start_with_windows
+    from ..startup import set_start_at_login
 except ImportError:  # Execução direta de app.py.
     from agy_integration import bridge_command, install_statusline, remove_statusline
     from config import save_config
     from models import PROVIDERS, AppConfig, Profile
-    from startup import set_start_with_windows
+    from startup import set_start_at_login
 from .theme import BG, LINE, MUTED, PANEL, PANEL_2, TEXT, provider_visuals
 
 
@@ -391,7 +391,7 @@ class SettingsDialog(tk.Toplevel):
                 )
                 return
         try:
-            set_start_with_windows(start_with_windows)
+            set_start_at_login(start_with_windows)
         except OSError as exc:
             if integration == "installed":
                 remove_statusline()
@@ -418,7 +418,7 @@ class SettingsDialog(tk.Toplevel):
             if integration == "installed":
                 remove_statusline()
             try:
-                set_start_with_windows(self.config["startWithWindows"])
+                set_start_at_login(self.config["startWithWindows"])
             except OSError:
                 pass
             messagebox.showerror("Configurações", f"Não foi possível salvar as configurações: {exc}", parent=self)

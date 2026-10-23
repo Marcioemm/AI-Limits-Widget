@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Limits Widget
+Name[pt_BR]=Limites de IA
+Comment=Monitor local de limites do Codex, Claude Code e Gemini
+Exec="@AI_LIMITS_EXECUTABLE@"
+TryExec=@AI_LIMITS_EXECUTABLE@
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;Monitor;
+StartupNotify=false

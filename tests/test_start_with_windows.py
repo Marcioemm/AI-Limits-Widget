@@ -16,13 +16,7 @@ class StartWithWindowsTests(unittest.TestCase):
         ):
             startup.set_start_with_windows(True)
 
-        registry.SetValueEx.assert_called_once_with(
-            ANY,
-            startup.WINDOWS_RUN_VALUE,
-            0,
-            registry.REG_SZ,
-            '"C:\\app.exe"',
-        )
+        registry.SetValueEx.assert_called_once_with(ANY, startup.WINDOWS_RUN_VALUE, 0, registry.REG_SZ, '"C:\\app.exe"')
 
     def test_disabling_removes_windows_run_entry(self):
         registry = MagicMock()
@@ -32,7 +26,3 @@ class StartWithWindowsTests(unittest.TestCase):
             startup.set_start_with_windows(False)
 
         registry.DeleteValue.assert_called_once_with(ANY, startup.WINDOWS_RUN_VALUE)
-
-
-if __name__ == "__main__":
-    unittest.main()
