@@ -208,9 +208,68 @@ class GeminiProviderTests(unittest.TestCase):
         opened.assert_not_called()
         self.assertEqual(0.0, result["weekly"]["usedPercent"])
 
+    def test_live_quota_accepts_supported_remaining_fraction_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            token = pathlib.Path(directory) / "token.json"
+            token.write_text(json.dumps({"access_token": "secret"}), encoding="utf-8")
+            client = GeminiClient(allow_live=True, token_path=token)
+            loaded = {"cloudaicompanionProject": {"id": "project-1"}}
+            summary = {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            {"window": "5h", "remaining_fraction": 0.75},
+                            {"window": "weekly", "remaining": {"remainingFraction": 0.4}},
+                        ],
+                    }
+                ]
+            }
+            with patch(
+                "ai_limits_widget.providers.gemini.urllib.request.urlopen",
+                side_effect=[_Response(loaded), _Response(summary)],
+            ):
+                result = client.read_limits()
+        self.assertEqual(25.0, result["five_hour"]["usedPercent"])
+        self.assertEqual(60.0, result["weekly"]["usedPercent"])
+
+    def test_live_bucket_without_remaining_fraction_falls_back_to_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            token = root / "token.json"
+            token.write_text(json.dumps({"access_token": "secret"}), encoding="utf-8")
+            cache = root / "quota.json"
+            cache.write_text(
+                json.dumps(
+                    {
+                        "model": {"displayName": "Gemini"},
+                        "quota": {"remainingFraction": 0.5, "resetTime": "week"},
+                        "capturedAt": 10,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            client = GeminiClient(cache, allow_live=True, token_path=token)
+            loaded = {"cloudaicompanionProject": {"id": "project-1"}}
+            summary = {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [{"window": "weekly", "resetTime": "later"}],
+                    }
+                ]
+            }
+            with patch(
+                "ai_limits_widget.providers.gemini.urllib.request.urlopen",
+                side_effect=[_Response(loaded), _Response(summary)],
+            ):
+                result = client.read_limits()
+        self.assertEqual(50.0, result["weekly"]["usedPercent"])
+        self.assertEqual("week", result["weekly"]["resetsAt"])
+
 
 class GrokProviderTests(unittest.TestCase):
-    def test_fraction_and_percent_are_normalized_to_weekly_usage(self) -> None:
+    def test_credit_usage_percent_keeps_the_api_percentage_scale(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             auth = pathlib.Path(directory) / "auth.json"
             auth.write_text(
@@ -222,17 +281,23 @@ class GrokProviderTests(unittest.TestCase):
                 "ai_limits_widget.providers.grok.urllib.request.urlopen",
                 return_value=_Response({"config": {"creditUsagePercent": 0.25, "currentPeriod": {"end": "week"}}}),
             ):
-                fraction = client.read_limits()
+                decimal_percent = client.read_limits()
+            with patch(
+                "ai_limits_widget.providers.grok.urllib.request.urlopen",
+                return_value=_Response({"config": {"creditUsagePercent": 1}}),
+            ):
+                one_percent = client.read_limits()
             with patch(
                 "ai_limits_widget.providers.grok.urllib.request.urlopen",
                 return_value=_Response({"config": {"creditUsagePercent": 40, "billingPeriodEnd": "later"}}),
             ):
                 percent = client.read_limits()
-        self.assertIsNone(fraction["five_hour"])
-        self.assertEqual(25.0, fraction["weekly"]["usedPercent"])
-        self.assertEqual("week", fraction["weekly"]["resetsAt"])
+        self.assertIsNone(decimal_percent["five_hour"])
+        self.assertEqual(0.25, decimal_percent["weekly"]["usedPercent"])
+        self.assertEqual("week", decimal_percent["weekly"]["resetsAt"])
+        self.assertEqual(1.0, one_percent["weekly"]["usedPercent"])
         self.assertEqual(40.0, percent["weekly"]["usedPercent"])
-        self.assertNotIn("secret", json.dumps(fraction))
+        self.assertNotIn("secret", json.dumps(decimal_percent))
 
     def test_auth_failure_uses_a_static_message(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

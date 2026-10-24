@@ -177,8 +177,6 @@ def _usage_percent(value: Any) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    if 0 <= number <= 1:
-        return number * 100.0
-    if 1 < number <= 100:
+    if 0 <= number <= 100:
         return number
     return None

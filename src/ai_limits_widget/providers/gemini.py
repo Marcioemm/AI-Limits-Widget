@@ -232,12 +232,17 @@ def _matching_bucket(buckets: list[Any], kind: str) -> dict[str, Any] | None:
 def _window(bucket: dict[str, Any] | None, duration: int, model_name: str, fetched_at: float) -> RateLimitWindow | None:
     if bucket is None:
         return None
-    raw_fraction = bucket.get("remainingFraction")
+    raw_fraction = _remaining_fraction(bucket)
+    if raw_fraction is None:
+        return None
     try:
-        remaining = 0.0 if raw_fraction is None else max(0.0, min(1.0, float(raw_fraction)))
+        remaining = max(0.0, min(1.0, float(raw_fraction)))
     except (TypeError, ValueError):
         return None
-    reset_time = bucket.get("resetTime")
+    nested = bucket.get("remaining")
+    reset_time = bucket.get("resetTime") or bucket.get("reset_time")
+    if reset_time is None and isinstance(nested, dict):
+        reset_time = nested.get("resetTime") or nested.get("reset_time")
     return {
         "usedPercent": (1.0 - remaining) * 100.0,
         "resetsAt": reset_time if isinstance(reset_time, (str, int, float)) else None,
@@ -245,3 +250,15 @@ def _window(bucket: dict[str, Any] | None, duration: int, model_name: str, fetch
         "modelName": model_name,
         "fetchedAt": fetched_at,
     }
+
+
+def _remaining_fraction(bucket: dict[str, Any]) -> Any:
+    for key in ("remainingFraction", "remaining_fraction"):
+        if key in bucket:
+            return bucket[key]
+    nested = bucket.get("remaining")
+    if isinstance(nested, dict):
+        for key in ("remainingFraction", "remaining_fraction"):
+            if key in nested:
+                return nested[key]
+    return None
