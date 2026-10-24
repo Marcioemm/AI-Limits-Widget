@@ -13,6 +13,7 @@ from .base import LimitsProvider, ProviderError, configured_executable, provider
 from .claude import ClaudeClient
 from .codex import CodexClient
 from .gemini import AgyClient, GeminiClient
+from .grok import GrokClient
 
 ProviderFactory = Callable[[Profile], LimitsProvider]
 
@@ -26,13 +27,18 @@ def _claude(profile: Profile) -> LimitsProvider:
 
 
 def _gemini(_profile: Profile) -> LimitsProvider:
-    return GeminiClient()
+    return GeminiClient(allow_live=True)
+
+
+def _grok(profile: Profile) -> LimitsProvider:
+    return GrokClient(profile["executable"], profile["configDir"])
 
 
 PROVIDER_FACTORIES: dict[ProviderName, ProviderFactory] = {
     "codex": _codex,
     "claude": _claude,
     "gemini": _gemini,
+    "grok": _grok,
 }
 
 
@@ -49,6 +55,7 @@ __all__ = [
     "ClaudeClient",
     "CodexClient",
     "GeminiClient",
+    "GrokClient",
     "LimitsProvider",
     "ProviderError",
     "configured_executable",

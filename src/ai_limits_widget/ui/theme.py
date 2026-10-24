@@ -14,6 +14,7 @@ MUTED = "#969d8c"
 ORANGE = "#c46a2b"
 CLAUDE_PURPLE = "#9672c4"
 GEMINI_BLUE = "#68a5f3"
+GROK_LIGHT = "#d7dbe3"
 YELLOW = "#f5c451"
 RED = "#f47676"
 TRANSPARENT_KEY = "#010203"
@@ -36,6 +37,7 @@ def provider_visuals(provider: str) -> tuple[str, str, str]:
         "codex": (CLAUDE_PURPLE, "CODEX", "OPENAI"),
         "claude": (ORANGE, "CLAUDE CODE", "ANTHROPIC"),
         "gemini": (GEMINI_BLUE, "GEMINI", "GOOGLE"),
+        "grok": (GROK_LIGHT, "GROK", "XAI"),
     }[provider]
 
 

@@ -17,6 +17,7 @@ PROVIDER_COMMANDS: dict[ProviderName, tuple[str, ...]] = {
     "codex": ("codex.exe", "codex.cmd", "codex"),
     "claude": ("claude.exe", "claude.cmd", "claude"),
     "gemini": ("agy.exe", "agy.cmd", "agy"),
+    "grok": ("grok.exe", "grok.cmd", "grok"),
 }
 
 
@@ -40,7 +41,7 @@ class LimitsProvider(Protocol):
 
 def provider_commands(provider: ProviderName) -> tuple[str, ...]:
     if os.name != "nt":
-        return {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",)}[provider]
+        return {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",), "grok": ("grok",)}[provider]
     return PROVIDER_COMMANDS[provider]
 
 
