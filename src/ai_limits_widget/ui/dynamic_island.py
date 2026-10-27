@@ -193,7 +193,7 @@ class DynamicIslandMixin:
     def _set_compact_island_height(self, height: int) -> None:
         if not all((self.compact_island, self.compact_content, self.compact_content_window)):
             return
-        width = self._compact_island_width()
+        width = self._compact_expanded_width() if self.compact_expanded else self._compact_island_width()
         content_width, inset = width - 14, 7
         if self.compact_expand_upward:
             self.compact_island.itemconfigure(self.compact_content_window, width=content_width, anchor="sw")
@@ -358,7 +358,7 @@ class DynamicIslandMixin:
         if not self.compact_grid:
             return COMPACT_ISLAND_HEIGHT
         self.compact_grid.pack_configure(fill="x", anchor="e")
-        column_count = self._compact_collapsed_count()
+        column_count = self._compact_expanded_count()
         for column in range(3):
             self.compact_grid.columnconfigure(
                 column,
@@ -385,7 +385,7 @@ class DynamicIslandMixin:
 
     def _arrange_compact_content(self, upward: bool) -> None:
         """Mantém as pilhas na borda de origem e posiciona os detalhes do outro lado."""
-        column_count = self._compact_collapsed_count()
+        column_count = self._compact_expanded_count()
         for index, (profile, meter) in enumerate(self.compact_meter_order):
             cell = self.compact_cells[profile["id"]]
             row, column = compact_grid_position(

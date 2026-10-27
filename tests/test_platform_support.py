@@ -137,5 +137,18 @@ class LinuxSourceInstallTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
 
 
+class WindowsInstallerBuildTests(unittest.TestCase):
+    def test_windows_build_bundles_agy_and_tests_executable_before_installer(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        build_script = (root / "scripts" / "build-installer.ps1").read_text(encoding="utf-8")
+
+        hidden_import = "--hidden-import ai_limits_widget.agy_integration"
+        smoke_test = "-ArgumentList '--build-smoke-test'"
+        inno_setup = '& $iscc "/DMyAppVersion=$Version"'
+        self.assertIn(hidden_import, build_script)
+        self.assertIn(smoke_test, build_script)
+        self.assertLess(build_script.index(smoke_test), build_script.index(inno_setup))
+
+
 if __name__ == "__main__":
     unittest.main()

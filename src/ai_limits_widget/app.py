@@ -5,20 +5,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
+import sys
 from typing import Any
 
-try:
-    from .agy_integration import bridge_command, install_statusline
-    from .profiles import load_profiles, profile_is_available
-    from .providers import create_provider
-    from .ui.app import UsageWidget
-    from .ui.theme import WINDOW_WIDTH, remaining
-except ImportError:  # Execução direta por scripts/start.ps1.
-    from agy_integration import bridge_command, install_statusline
-    from profiles import load_profiles, profile_is_available
-    from providers import create_provider
-    from ui.app import UsageWidget
-    from ui.theme import WINDOW_WIDTH, remaining
+if __package__ in {None, ""}:  # Execução direta por scripts/start.ps1.
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from ai_limits_widget.agy_integration import bridge_command, install_statusline
+from ai_limits_widget.profiles import load_profiles, profile_is_available
+from ai_limits_widget.providers import create_provider
+from ai_limits_widget.ui.app import UsageWidget
+from ai_limits_widget.ui.theme import WINDOW_WIDTH, remaining
 
 __all__ = ["UsageWidget", "WINDOW_WIDTH", "executable_filetypes", "main", "print_once", "provider_commands"]
 
@@ -70,7 +68,10 @@ def main() -> None:
     parser.add_argument(
         "--install-agy-integration", action="store_true", help="configura o coletor local de cotas na statusline do AGY"
     )
+    parser.add_argument("--build-smoke-test", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.build_smoke_test:
+        return
     if args.install_agy_integration:
         result = install_statusline(command=bridge_command())
         if result == "conflict":
