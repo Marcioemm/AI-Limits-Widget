@@ -90,6 +90,77 @@ class ConfigLoadTests(unittest.TestCase):
             profiles,
         )
 
+    def test_saved_profiles_are_merged_with_discovered_claude_accounts(self) -> None:
+        configured = config_module.normalize_config(
+            {
+                "providers": ["codex", "claude"],
+                "executables": {"claude": "claude.exe"},
+                "profiles": [
+                    {"id": "codex-default", "provider": "codex", "label": "Padrão"},
+                    {"id": "claude-default", "provider": "claude", "label": "UF"},
+                ],
+            }
+        )
+        discovered = [
+            {
+                "id": "claude-default",
+                "provider": "claude",
+                "label": "Padrão",
+                "executable": "claude.exe",
+                "configDir": None,
+            },
+            {
+                "id": "claude-lazaro",
+                "provider": "claude",
+                "label": "lazaro",
+                "executable": "claude.exe",
+                "configDir": str(pathlib.Path.home() / ".claude-lazaro"),
+            },
+        ]
+
+        with (
+            patch.object(profiles_module, "load_config", return_value=configured),
+            patch.object(profiles_module, "discover_claude_profiles", return_value=discovered),
+        ):
+            profiles = profiles_module.load_profiles()
+
+        self.assertEqual(["codex-default", "claude-default", "claude-lazaro"], [item["id"] for item in profiles])
+        self.assertEqual("UF", profiles[1]["label"])
+
+    def test_manual_claude_directory_is_not_duplicated_by_discovery(self) -> None:
+        extra_directory = str(pathlib.Path.home() / ".claude-lazaro")
+        configured = config_module.normalize_config(
+            {
+                "providers": ["claude"],
+                "profiles": [
+                    {"id": "claude-default", "provider": "claude", "label": "UF"},
+                    {
+                        "id": "claude-personal",
+                        "provider": "claude",
+                        "label": "Pessoal",
+                        "configDir": extra_directory,
+                    },
+                ],
+            }
+        )
+        discovered = [
+            {
+                "id": "claude-lazaro",
+                "provider": "claude",
+                "label": "lazaro",
+                "executable": None,
+                "configDir": extra_directory,
+            }
+        ]
+
+        with (
+            patch.object(profiles_module, "load_config", return_value=configured),
+            patch.object(profiles_module, "discover_claude_profiles", return_value=discovered),
+        ):
+            profiles = profiles_module.load_profiles()
+
+        self.assertEqual(["claude-default", "claude-personal"], [item["id"] for item in profiles])
+
     def test_grok_is_merged_only_when_saved_config_never_mentioned_it(self) -> None:
         discovered = [
             {

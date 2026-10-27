@@ -136,8 +136,15 @@ class UsageWidget(DynamicIslandMixin):
     def _compact_collapsed_count(self) -> int:
         return max(1, min(3, self.compact_visible_count, len(self.profiles)))
 
+    def _compact_expanded_count(self) -> int:
+        """Usa uma coluna por perfil ao abrir, até o limite suportado pela ilha."""
+        return max(1, min(3, len(self.profiles)))
+
     def _compact_island_width(self) -> int:
         return COMPACT_ISLAND_MIN_WIDTH + (self._compact_collapsed_count() - 1) * COMPACT_BATTERY_SLOT_WIDTH
+
+    def _compact_expanded_width(self) -> int:
+        return COMPACT_ISLAND_MIN_WIDTH + (self._compact_expanded_count() - 1) * COMPACT_BATTERY_SLOT_WIDTH
 
     def _close_clients(self) -> None:
         for client in self.clients.values():

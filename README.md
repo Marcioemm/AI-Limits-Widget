@@ -119,10 +119,11 @@ semanal.
 Também é possível escolher entre uma e três baterias visíveis na pílula
 reduzida. A principal aparece primeiro e as demais são posicionadas ao lado.
 Mantenha o cursor sobre a pílula para revelar as outras baterias. Ao passar
-sobre a pílula, cada bateria mostra logo abaixo dela o perfil, a janela
+sobre a pílula, ela abre colunas suficientes para os perfis disponíveis e cada
+bateria mostra logo abaixo dela o perfil, a janela
 acompanhada e a renovação, em linhas alinhadas, sem fazer uma nova consulta.
-A ilha expande e recolhe suavemente, mantendo a largura e o tamanho das
-baterias durante toda a transição. Perto do rodapé do monitor, ela detecta a
+A ilha expande e recolhe suavemente, mantendo o tamanho das baterias durante
+toda a transição. Perto do rodapé do monitor, ela detecta a
 área útil disponível, mantém as baterias no lugar e revela os detalhes acima
 delas para evitar cortes.
 Arraste pela própria
@@ -153,9 +154,12 @@ no menu de aplicativos.
 ### Várias contas
 
 O widget mostra um cartão para cada perfil local que consegue identificar. O
-instalador cria os perfis padrão e, no modo guiado, permite adicionar outros.
-Para uma segunda conta, informe um nome de exibição e o diretório de
-configuração usado por ela:
+Claude Code é descoberto automaticamente nas pastas `.claude`, `.claude-*` e
+no diretório indicado por `CLAUDE_CONFIG_DIR`. Essa busca roda na primeira
+abertura e sempre que **Verificar novamente** é acionado, inclusive quando já
+existem perfis salvos. Perfis manuais são preservados e a mesma pasta nunca é
+adicionada duas vezes. Para contas guardadas em outros locais, informe um nome
+de exibição e o diretório de configuração usado por ela:
 
 - Codex: o diretório definido como `CODEX_HOME` para aquele perfil;
 - Claude Code: o diretório definido como `CLAUDE_CONFIG_DIR` para aquele
@@ -163,8 +167,8 @@ configuração usado por ela:
 
 Se a CLI ou a configuração de um perfil não existir, ele fica oculto — não há
 uma barra vazia para provedores indisponíveis. O aplicativo nunca procura
-credenciais em pastas arbitrárias: ele usa apenas o perfil padrão ou os
-diretórios que a própria pessoa indicou no instalador.
+credenciais em pastas arbitrárias: ele usa os locais padrão descritos acima ou
+os diretórios que a própria pessoa indicou.
 
 ## Configuração dos provedores
 

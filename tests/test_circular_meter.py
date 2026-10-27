@@ -103,6 +103,14 @@ class CompactMeterTests(unittest.TestCase):
                 self.assertEqual(app.COMPACT_METER_WIDTH, int(widget.compact_meter_order[0][1].cget("width")))
                 self.assertTrue(widget.compact_cells["codex-default"].winfo_manager())
                 self.assertEqual("", widget.compact_cells["gemini-default"].winfo_manager())
+                widget._render_profile_meters(
+                    profiles[0],
+                    None,
+                    {"usedPercent": 7, "resetsAt": 1800600000},
+                )
+                codex_meter = widget.meters["codex-default"][0]
+                self.assertEqual(93, codex_meter.percent)
+                self.assertEqual("SEMANA", widget.compact_details["codex-default"]["window"])
                 collapsed_x = widget.root.winfo_x()
                 collapsed_y = widget.root.winfo_y()
                 collapsed_height = widget.root.winfo_height()
@@ -111,8 +119,11 @@ class CompactMeterTests(unittest.TestCase):
                 self.assertIsNotNone(widget.compact_animation_after)
                 expanding_heights = self._finish_compact_animation(widget)
                 self.assertTrue(widget.compact_expanded)
-                self.assertEqual(widget._compact_island_width(), widget.root.winfo_width())
-                self.assertEqual(collapsed_x, widget.root.winfo_x())
+                self.assertEqual(widget._compact_expanded_width(), widget.root.winfo_width())
+                self.assertEqual(
+                    collapsed_x + widget._compact_island_width(),
+                    widget.root.winfo_x() + widget.root.winfo_width(),
+                )
                 self.assertEqual(collapsed_y, widget.root.winfo_y())
                 self.assertFalse(widget.compact_expand_upward)
                 self.assertGreater(widget.root.winfo_height(), collapsed_height)
@@ -134,6 +145,10 @@ class CompactMeterTests(unittest.TestCase):
                     self.assertTrue(widgets["panel"].winfo_manager())
                     self.assertGreater(widgets["panel"].winfo_y(), meter.winfo_y())
                     self.assertNotIn("updated", widgets)
+                self.assertEqual(
+                    1,
+                    len({cell.grid_info()["row"] for cell in widget.compact_cells.values()}),
+                )
                 for field in ("title", "window", "value", "reset"):
                     field_positions = {
                         profile_id: widgets[field].winfo_y()
@@ -158,6 +173,7 @@ class CompactMeterTests(unittest.TestCase):
                 reversed_heights = self._finish_compact_animation(widget)
                 self.assertGreaterEqual(reversed_heights[0], reversing_height)
                 self.assertEqual(expanded_height, widget.root.winfo_height())
+                self.assertEqual(widget._compact_expanded_width(), widget.root.winfo_width())
 
                 widget._collapse_compact_island()
                 collapsing_heights = self._finish_compact_animation(widget)

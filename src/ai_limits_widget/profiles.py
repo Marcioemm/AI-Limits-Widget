@@ -74,6 +74,11 @@ def discover_claude_profiles(executable: str | None) -> list[Profile]:
     return profiles
 
 
+def _claude_profile_directory(profile: Profile) -> str:
+    directory = pathlib.Path(profile.get("configDir") or pathlib.Path.home() / ".claude")
+    return os.path.normcase(str(directory.resolve()))
+
+
 def discover_grok_profiles(executable: str | None) -> list[Profile]:
     """Encontra a sessão do Grok em ~/.grok ou GROK_HOME, sem copiar a chave."""
     auth_file = grok_auth_file()
@@ -91,10 +96,27 @@ def discover_grok_profiles(executable: str | None) -> list[Profile]:
 
 
 def load_profiles() -> list[Profile]:
-    """Carrega perfis configurados e converte a configuração antiga quando necessário."""
+    """Carrega perfis salvos e acrescenta automaticamente contas locais do Claude."""
     config = load_config()
     if config["profiles"]:
         profiles = [profile.copy() for profile in config["profiles"]]
+        if "claude" in config["providers"]:
+            known_directories = {
+                _claude_profile_directory(profile) for profile in profiles if profile["provider"] == "claude"
+            }
+            known_ids = {profile["id"] for profile in profiles}
+            for discovered in discover_claude_profiles(config["executables"].get("claude")):
+                if _claude_profile_directory(discovered) in known_directories:
+                    continue
+                candidate = discovered.copy()
+                base_id = candidate["id"]
+                suffix = 2
+                while candidate["id"] in known_ids:
+                    candidate["id"] = f"{base_id}-{suffix}"
+                    suffix += 1
+                profiles.append(candidate)
+                known_directories.add(_claude_profile_directory(candidate))
+                known_ids.add(candidate["id"])
     else:
         profiles = []
         executables = config["executables"]
