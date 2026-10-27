@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-ProviderName = Literal["codex", "claude", "gemini"]
+ProviderName = Literal["codex", "claude", "gemini", "grok"]
 LayoutName = Literal["cards", "compact"]
-PROVIDERS: tuple[ProviderName, ...] = ("codex", "claude", "gemini")
+PROVIDERS: tuple[ProviderName, ...] = ("codex", "claude", "gemini", "grok")
 
 
 class Profile(TypedDict):

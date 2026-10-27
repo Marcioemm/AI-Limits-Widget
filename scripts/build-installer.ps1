@@ -58,10 +58,11 @@ try {
     --name $appName `
     --paths (Join-Path $projectRoot 'src') `
     --hidden-import ai_limits_widget.agy_integration `
+    --collect-submodules ai_limits_widget `
     --distpath $distPath `
     --workpath $workPath `
     --specpath $specPath `
-    (Join-Path $projectRoot 'src\ai_limits_widget\app.py')
+    (Join-Path $projectRoot 'packaging\frozen_launcher.py')
   if ($LASTEXITCODE -ne 0) {
     throw 'O empacotamento com PyInstaller falhou.'
   }

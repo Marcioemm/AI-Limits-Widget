@@ -29,9 +29,10 @@ def provider_commands(provider: str, *, windows: bool | None = None) -> tuple[st
             "codex": ("codex.exe", "codex.cmd", "codex"),
             "claude": ("claude.exe", "claude.cmd", "claude"),
             "gemini": ("agy.exe", "agy.cmd", "agy"),
+            "grok": ("grok.exe", "grok.cmd", "grok"),
         }
         if on_windows
-        else {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",)}
+        else {"codex": ("codex",), "claude": ("claude",), "gemini": ("agy",), "grok": ("grok",)}
     )
     return commands[provider]
 

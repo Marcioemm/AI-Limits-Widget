@@ -30,7 +30,7 @@ def default_config() -> AppConfig:
         "compactPrimaryProfileId": None,
         "compactVisibleCount": 1,
         "startWithWindows": False,
-        "executables": {"codex": None, "claude": None, "gemini": None},
+        "executables": {"codex": None, "claude": None, "gemini": None, "grok": None},
         "profiles": [],
     }
 
@@ -91,6 +91,27 @@ def normalize_config(value: Any) -> AppConfig:
             profile for index, item in enumerate(profiles) if (profile := _normalize_profile(item, index)) is not None
         ]
     return config
+
+
+def raw_config_mentions(provider: str, path: pathlib.Path | None = None) -> bool:
+    """Diz se o JSON gravado já cita o provedor, sem normalizar chaves novas."""
+    target = path or CONFIG_FILE
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False
+    if not isinstance(raw, Mapping):
+        return False
+    providers = raw.get("providers")
+    executables = raw.get("executables")
+    profiles = raw.get("profiles")
+    if isinstance(providers, list) and provider in providers:
+        return True
+    if isinstance(executables, Mapping) and provider in executables:
+        return True
+    if isinstance(profiles, list):
+        return any(isinstance(item, Mapping) and item.get("provider") == provider for item in profiles)
+    return False
 
 
 def load_config(path: pathlib.Path | None = None) -> AppConfig:

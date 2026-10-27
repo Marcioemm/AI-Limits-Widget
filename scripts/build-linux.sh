@@ -53,12 +53,11 @@ mkdir -p "$dist_path" "$work_path" "$spec_path"
   --windowed \
   --name "$app_name" \
   --paths "$project_root/src" \
-  --hidden-import ai_limits_widget.agy_integration \
-  --hidden-import ai_limits_widget.platform_support \
+  --collect-submodules ai_limits_widget \
   --distpath "$dist_path" \
   --workpath "$work_path/app" \
   --specpath "$spec_path" \
-  "$project_root/src/ai_limits_widget/app.py"
+  "$project_root/packaging/frozen_launcher.py"
 
 "$widget_python" -m PyInstaller \
   --noconfirm \

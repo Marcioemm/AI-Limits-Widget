@@ -8,14 +8,16 @@ import tkinter.messagebox as messagebox
 from typing import Any, Protocol
 
 try:
-    from ..agy_integration import bridge_command, install_statusline, remove_statusline
+    from ..agy_integration import bridge_command, cache_file, install_statusline, remove_statusline
     from ..config import save_config
     from ..models import PROVIDERS, AppConfig, Profile
+    from ..providers.gemini import gemini_has_session
     from ..startup import set_start_at_login
 except ImportError:  # Execução direta de app.py.
-    from agy_integration import bridge_command, install_statusline, remove_statusline
+    from agy_integration import bridge_command, cache_file, install_statusline, remove_statusline
     from config import save_config
     from models import PROVIDERS, AppConfig, Profile
+    from providers.gemini import gemini_has_session
     from startup import set_start_at_login
 from .theme import BG, LINE, MUTED, PANEL, PANEL_2, TEXT, provider_visuals
 
@@ -24,6 +26,7 @@ class SettingsHost(Protocol):
     root: tk.Tk
     config: AppConfig
     layout: str
+    configured_profiles: list[Profile]
 
     def rescan_integrations(self) -> None: ...
 
@@ -42,11 +45,8 @@ class SettingsDialog(tk.Toplevel):
         self.grab_set()
 
         enabled = set(self.config["providers"])
-        self.provider_vars = {
-            "codex": tk.BooleanVar(value="codex" in enabled),
-            "claude": tk.BooleanVar(value="claude" in enabled),
-            "gemini": tk.BooleanVar(value="gemini" in enabled),
-        }
+        enabled.update(profile["provider"] for profile in getattr(widget, "configured_profiles", []))
+        self.provider_vars = {provider: tk.BooleanVar(value=provider in enabled) for provider in PROVIDERS}
         self.path_vars = {
             provider: tk.StringVar(value=self.config["executables"].get(provider) or "") for provider in PROVIDERS
         }
@@ -58,7 +58,7 @@ class SettingsDialog(tk.Toplevel):
         self.extra_profiles: list[Profile] = [
             dict(item)
             for item in self.config.get("profiles", [])
-            if isinstance(item, dict) and item.get("id") not in {"codex-default", "claude-default", "gemini-default"}
+            if isinstance(item, dict) and not str(item.get("id", "")).endswith("-default")
         ]
         self._build()
 
@@ -115,12 +115,24 @@ class SettingsDialog(tk.Toplevel):
             activebackground=BG,
             activeforeground=TEXT,
             command=self._refresh_primary_choices,
+        ).pack(side="left", padx=(0, 14))
+        tk.Checkbutton(
+            providers,
+            text="Grok",
+            variable=self.provider_vars["grok"],
+            bg=BG,
+            fg=TEXT,
+            selectcolor=PANEL_2,
+            activebackground=BG,
+            activeforeground=TEXT,
+            command=self._refresh_primary_choices,
         ).pack(side="left")
 
         for provider, title in (
             ("codex", "Executável do Codex CLI"),
             ("claude", "Executável do Claude Code"),
             ("gemini", "Executável do Antigravity CLI (agy)"),
+            ("grok", "Executável do Grok CLI"),
         ):
             self._label(body, title)
             row = tk.Frame(body, bg=BG)
@@ -156,7 +168,11 @@ class SettingsDialog(tk.Toplevel):
 
         tk.Label(
             body,
-            text="Gemini usa a statusline oficial do AGY. Ao salvar, o widget ativa um coletor local que guarda somente modelo, percentual e renovação.",
+            text=(
+                "Gemini consulta a cota ao vivo quando há sessão do AGY e, se a consulta falhar, "
+                "usa o cache da statusline. Ao salvar, o widget ainda tenta ativar o coletor local, "
+                "que guarda somente modelo, percentual e renovação."
+            ),
             bg=BG,
             fg=MUTED,
             justify="left",
@@ -267,7 +283,7 @@ class SettingsDialog(tk.Toplevel):
             for provider, variable in self.provider_vars.items()
             if variable.get()
         ]
-        profiles.extend(profile for profile in self.extra_profiles if profile.get("provider") in {"codex", "claude"})
+        profiles.extend(profile for profile in self.extra_profiles if profile.get("provider") != "gemini")
         self.primary_choice_ids = {}
         self.primary_menu.delete(0, tk.END)
         for profile in profiles:
@@ -382,7 +398,7 @@ class SettingsDialog(tk.Toplevel):
             except RuntimeError as exc:
                 messagebox.showerror("Integração com AGY", str(exc), parent=self)
                 return
-            if integration == "conflict":
+            if integration == "conflict" and not gemini_has_session() and not cache_file().is_file():
                 messagebox.showerror(
                     "Integração com AGY",
                     "O AGY já possui uma statusline personalizada. Ela não foi sobrescrita. "

@@ -71,7 +71,10 @@ class ConfigLoadTests(unittest.TestCase):
 
     def test_legacy_provider_list_still_creates_default_profiles(self) -> None:
         legacy = config_module.normalize_config({"providers": ["codex"], "executables": {"codex": "codex.exe"}})
-        with patch.object(profiles_module, "load_config", return_value=legacy):
+        with (
+            patch.object(profiles_module, "load_config", return_value=legacy),
+            patch.object(profiles_module, "discover_grok_profiles", return_value=[]),
+        ):
             profiles = profiles_module.load_profiles()
 
         self.assertEqual(
@@ -157,6 +160,41 @@ class ConfigLoadTests(unittest.TestCase):
             profiles = profiles_module.load_profiles()
 
         self.assertEqual(["claude-default", "claude-personal"], [item["id"] for item in profiles])
+
+    def test_grok_is_merged_only_when_saved_config_never_mentioned_it(self) -> None:
+        discovered = [
+            {
+                "id": "grok-default",
+                "provider": "grok",
+                "label": "ada",
+                "executable": None,
+                "configDir": "/tmp/grok",
+            }
+        ]
+        saved = config_module.normalize_config(
+            {"providers": ["codex"], "profiles": [{"provider": "codex", "label": "Padrão"}]}
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            silent = pathlib.Path(directory) / "silent.json"
+            silent.write_text(json.dumps({"providers": ["codex"]}), encoding="utf-8")
+            mentioned = pathlib.Path(directory) / "mentioned.json"
+            mentioned.write_text(json.dumps({"executables": {"grok": None}}), encoding="utf-8")
+            with (
+                patch.object(profiles_module, "load_config", return_value=saved),
+                patch.object(profiles_module, "CONFIG_FILE", silent),
+                patch.object(profiles_module, "discover_grok_profiles", return_value=discovered),
+            ):
+                merged = profiles_module.load_profiles()
+            with (
+                patch.object(profiles_module, "load_config", return_value=saved),
+                patch.object(profiles_module, "CONFIG_FILE", mentioned),
+                patch.object(profiles_module, "discover_grok_profiles", return_value=discovered) as discover,
+            ):
+                kept = profiles_module.load_profiles()
+        self.assertEqual("grok", merged[-1]["provider"])
+        self.assertEqual("ada", merged[-1]["label"])
+        self.assertTrue(all(profile["provider"] != "grok" for profile in kept))
+        discover.assert_not_called()
 
 
 class ConfigSaveTests(unittest.TestCase):
