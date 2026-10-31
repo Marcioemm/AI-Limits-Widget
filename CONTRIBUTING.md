@@ -15,6 +15,8 @@ dados pessoais. Para vulnerabilidades, siga [SECURITY.md](SECURITY.md).
 
 1. Faça um *fork* do repositório e crie uma branch a partir de `main`.
 2. Faça uma alteração pequena e focada.
+   Registre mudanças relevantes para usuários em **Não lançado** no
+   [CHANGELOG.md](CHANGELOG.md).
 3. Execute a validação local:
 
    ```powershell
