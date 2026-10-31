@@ -1,20 +1,17 @@
 import json
 import pathlib
-import sys
 import tempfile
 import unittest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-from ai_limits_widget.agy_integration import (  # noqa: E402
-    AgyClient,
+from ai_limits_widget.agy_integration import (
     extract_gemini_quota,
     install_statusline,
+    is_our_bridge,
     remove_statusline,
     save_statusline_payload,
     statusline_state,
 )
+from ai_limits_widget.providers.gemini import GeminiClient
 
 
 class AgyQuotaTests(unittest.TestCase):
@@ -52,13 +49,17 @@ class AgyQuotaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "quota.json"
             self.assertTrue(save_statusline_payload(self.payload(), path=path, captured_at=1234))
-            data = AgyClient(path).read_limits()
+            data = GeminiClient(path).read_limits()
         self.assertAlmostEqual(29.46, data["weekly"]["usedPercent"], places=2)
         self.assertEqual(10080, data["weekly"]["windowDurationMins"])
-        self.assertEqual("Gemini 3.1 Pro (High)", data["model"])
+        self.assertEqual("Gemini 3.1 Pro (High)", data["weekly"]["modelName"])
 
 
 class AgySettingsTests(unittest.TestCase):
+    def test_recognizes_windows_and_linux_bridge_names(self) -> None:
+        self.assertTrue(is_our_bridge(r'"C:\App\AI Limits AGY Bridge.exe"'))
+        self.assertTrue(is_our_bridge("/usr/lib/ai-limits-widget/ai-limits-agy-bridge"))
+
     def test_installs_and_removes_only_our_statusline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "settings.json"
