@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ai-limits-widget"
 version = "0.1.15"
-description = "Widget local para acompanhar limites de uso do Codex e Claude Code."
+description = "Widget local para acompanhar limites de uso do Codex, Claude Code e Gemini."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -13,8 +13,10 @@ authors = [{ name = "Marcio Emmanuel" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Win32 (MS Windows)",
+  "Environment :: X11 Applications",
   "License :: OSI Approved :: MIT License",
   "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
   "Topic :: Utilities",
 ]
@@ -22,9 +24,49 @@ classifiers = [
 [project.scripts]
 ai-limits-widget = "ai_limits_widget.app:main"
 
+[project.optional-dependencies]
+dev = [
+  "coverage==7.6.12",
+  "mypy==1.15.0",
+  "ruff==0.9.10",
+]
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "src/ai_limits_widget/compact_layout.py",
+  "src/ai_limits_widget/config.py",
+  "src/ai_limits_widget/models.py",
+  "src/ai_limits_widget/profiles.py",
+  "src/ai_limits_widget/providers",
+  "src/ai_limits_widget/startup.py",
+]
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_configs = true
+disable_error_code = ["import-not-found", "no-redef"]
+
+[tool.coverage.run]
+branch = true
+source = ["ai_limits_widget"]
+
+[tool.coverage.report]
+fail_under = 30
+show_missing = true
+skip_covered = true
 

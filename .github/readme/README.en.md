@@ -2,17 +2,17 @@
 
 🇺🇸 English · [🇪🇸 Español](README.es.md) · [🇧🇷 Português](../../README.md)
 
-A lightweight Windows widget that shows the remaining usage limits for Codex
-and Claude Code directly on your desktop.
+A lightweight Windows and Ubuntu widget that shows the remaining usage limits for Codex,
+Claude Code, and Gemini through AGY directly on your desktop.
 
 > This independent project is not affiliated with, endorsed by, or maintained
-> by OpenAI or Anthropic.
+> by OpenAI, Anthropic, or Google.
 
 ## What it does
 
 - Displays the remaining percentage for each usage window rather than making
   up a conversion to “tokens remaining”.
-- Refreshes Codex and Claude Code at configurable intervals (five minutes by
+- Refreshes Codex, Claude Code, and the Gemini cache at configurable intervals (five minutes by
   default).
 - Works locally and can remain always on top.
 - Keeps the last valid Claude value during a temporary rate-limit response.
@@ -27,23 +27,24 @@ and Claude Code directly on your desktop.
 
 ## Requirements
 
-- Windows 10 or 11.
-- Python 3.10 or later with Tkinter (included with the official Python installer).
+- Windows 10 or 11, or Ubuntu 24.04 LTS.
+- To run from source: Python 3.10 or later with Tkinter.
 - Optional: an authenticated Codex CLI installation, to display Codex.
 - Optional: an authenticated Claude Code installation, to display Claude Code.
+- Optional: an authenticated Antigravity CLI (`agy`) installation, to display the active Gemini model.
 
 Install only the integrations you plan to use. If a CLI is not installed or is
 not authenticated, the widget keeps working and explains why in that provider's
 section.
 
-## Install with the installer
+## Install on Windows
 
 Download `AI-Limits-Widget-Setup-<version>.exe` from the
 [Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases) page, run
 it, and choose the Desktop shortcut if you want one. The installer bundles the
 runtime required by the widget, so Python is not needed to use it.
 
-The Codex CLI and Claude Code remain optional and must be installed and
+The Codex CLI, Claude Code, and Antigravity CLI (`agy`) remain optional and must be installed and
 authenticated under the same Windows account for their limits to appear. The
 installer neither copies nor requests credentials.
 
@@ -51,29 +52,53 @@ The Codex desktop app alone does not provide the local integration used by the
 widget: also install the [Codex CLI](https://learn.chatgpt.com/docs/codex/cli)
 to monitor your limits. For Claude, follow the official
 [Claude Code installation guide](https://docs.anthropic.com/en/docs/claude-code/getting-started).
+For Gemini, install the [Antigravity CLI](https://antigravity.google/docs/cli/)
+and enable **Gemini (AGY)** in Settings. The widget installs a local statusline
+bridge that receives the official quota for the active Gemini model.
 When neither CLI is available, the widget shows installation links and a
 **Check again** button; restarting the app is unnecessary.
 
+## Install on Ubuntu
+
+Download `ai-limits-widget_<version>_amd64.deb` and its `.sha256` file from
+[Releases](https://github.com/Marcioemm/AI-Limits-Widget/releases), then run:
+
+```bash
+sha256sum --check ai-limits-widget_<version>_amd64.deb.sha256
+sudo apt install ./ai-limits-widget_<version>_amd64.deb
+```
+
+Open **AI Limits Widget** from the application menu or run
+`ai-limits-widget`. The package bundles the widget runtime; provider CLIs
+remain optional and are discovered on the Linux account's `PATH`.
+
 ## Install from source
 
-1. Clone the repository:
+1. Clone the repository on Windows or Ubuntu:
 
    ```powershell
    git clone https://github.com/Marcioemm/AI-Limits-Widget.git
    cd ai-limits-widget
    ```
 
-2. Start the widget:
+2. On Windows, start the widget:
 
    ```powershell
    .\scripts\start.ps1
+   ```
+
+   On Ubuntu, install the dependencies and create the application-menu entry:
+
+   ```bash
+   sudo apt install python3 python3-venv python3-tk
+   bash scripts/setup.sh
    ```
 
    Open **⚙ Settings** in the widget to choose providers, change the refresh
    interval, provide an executable outside `PATH`, and add additional profiles.
    No credentials are requested or stored.
 
-3. Stop only this widget:
+3. On Windows, stop only this widget:
 
    ```powershell
    .\scripts\stop.ps1
@@ -104,10 +129,13 @@ To automate installation, pass options directly:
 .\scripts\setup.ps1 -Providers both -RefreshMinutes 5 -CreateDesktopShortcut -Start
 ```
 
-Accepted `-Providers` values are `codex`, `claude`, and `both`. If the CLI is
+Accepted `-Providers` values are `codex`, `claude`, `gemini`, `both`, and `all`. If the CLI is
 not on `PATH`, provide its executable — for example,
-`-ClaudePath 'D:\tools\claude.cmd'`. Paths are optional: the widget attempts to
+`-ClaudePath 'D:\tools\claude.cmd'` or `-AgyPath 'D:\tools\agy.exe'`. Paths are optional: the widget attempts to
 find the tools again whenever it opens.
+
+On Ubuntu, `bash scripts/setup.sh` creates the virtual environment and
+registers the widget in the application menu.
 
 ### Multiple accounts
 
@@ -128,16 +156,23 @@ directories explicitly supplied through the installer.
 
 ### Codex
 
-Install and authenticate the Codex CLI under the same Windows account. The
+Install and authenticate the Codex CLI under the same system account. The
 widget starts the local Codex process only while checking limits and stops it
 immediately afterward to reduce idle memory consumption.
 
 ### Claude Code
 
-Install and authenticate Claude Code under the same Windows account. If the
+Install and authenticate Claude Code under the same system account. If the
 session expires, the widget asks the CLI itself to renew it locally. During
 temporary rate-limit responses, the last valid balance is preserved and a new
 attempt is automatically scheduled.
+
+### Gemini through Antigravity CLI
+
+The widget uses AGY's official statusline integration. The collector keeps only
+the active Gemini model name, weekly percentage, reset time, and collection
+time. Claude or GPT models selected in AGY are ignored, and an existing custom
+statusline is never overwritten automatically.
 
 Integrations depend on the interfaces offered by the CLIs and may require
 changes when those interfaces change.
@@ -146,8 +181,10 @@ changes when those interfaces change.
 
 The application checks only the processes and services necessary for the
 enabled providers. There are no analytics, remote database, or credentials sent
-to this repository. Local data is stored in `%LOCALAPPDATA%\LimitesIA` and
-contains only preferences, percentages, and refresh times.
+to this repository. On Windows, local data is stored in
+`%LOCALAPPDATA%\LimitesIA`. On Linux, configuration is stored in
+`~/.config/ai-limits-widget` and cache data in `~/.cache/ai-limits-widget`.
+These files contain only preferences, percentages, and refresh times.
 
 Before opening an issue, read [SECURITY.md](../../SECURITY.md). Never submit
 authentication files, tokens, complete logs, or screenshots with private
@@ -159,8 +196,8 @@ tokens, account IDs, or local paths.
 
 To check limits without opening the window:
 
-```powershell
-python .\src\ai_limits_widget\app.py --once
+```text
+python src/ai_limits_widget/app.py --once
 ```
 
 If Claude Code reports that the session has expired, run:
@@ -177,6 +214,7 @@ then restart the widget.
 The project has no third-party dependencies. For a basic verification:
 
 ```powershell
+python -m pip install --editable .
 python -m compileall .\src
 python -m unittest discover -s .\tests -v
 python .\src\ai_limits_widget\app.py --once

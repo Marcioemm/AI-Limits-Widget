@@ -1,5 +1,7 @@
 # Gerando o instalador Windows
 
+Para o pacote Ubuntu, consulte [RELEASING_LINUX.md](RELEASING_LINUX.md).
+
 O instalador é gerado apenas no Windows e não inclui credenciais nem os CLIs do
 Codex ou Claude Code. Esses programas continuam sendo detectados no perfil local
 da pessoa usuária quando o widget é aberto.
@@ -49,11 +51,15 @@ Trabalho, além de criar um desinstalador.
 ## Publicação manual
 
 1. Atualize a versão em `pyproject.toml` e em `src\ai_limits_widget\__init__.py`.
-2. Gere o instalador e teste a instalação em uma conta Windows sem Python.
-3. Crie e envie uma tag `v<versão>`.
-4. Crie uma GitHub Release baseada nessa tag e anexe o `.exe` e o `.sha256`.
-5. Inclua nas notas de versão que Codex CLI e Claude Code são opcionais e devem
+2. Mova as alterações de **Não lançado** no [CHANGELOG.md](../CHANGELOG.md) para
+   uma seção com a nova versão e a data de publicação; recrie **Não lançado**.
+3. Integre essas alterações à `main`, gere o instalador a partir do commit
+   correspondente e teste a instalação em uma conta Windows sem Python.
+4. Crie e envie uma tag `v<versão>` apontando para esse mesmo commit.
+5. Crie uma GitHub Release baseada nessa tag, use o histórico como base para as
+   notas e anexe o `.exe` e o `.sha256`.
+6. Inclua nas notas de versão que Codex CLI e Claude Code são opcionais e devem
    ser instalados/autenticados separadamente.
 
-O próximo passo será automatizar essas etapas em GitHub Actions quando o build
-manual estiver validado.
+O instalador Windows permanece manual. O pacote Ubuntu é automatizado pelo
+workflow **Build Ubuntu**, descrito em [RELEASING_LINUX.md](RELEASING_LINUX.md).

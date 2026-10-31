@@ -56,6 +56,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: now
 var
   CodexCliPage: TOutputMsgWizardPage;
   CodexCliLink: TNewStaticText;
+  AgyCliLink: TNewStaticText;
 
 procedure OpenCodexCliDocs(Sender: TObject);
 var
@@ -64,13 +65,20 @@ begin
   ShellExec('open', 'https://learn.chatgpt.com/docs/codex/cli', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
 end;
 
+procedure OpenAgyCliDocs(Sender: TObject);
+var
+  ErrorCode: Integer;
+begin
+  ShellExec('open', 'https://antigravity.google/docs/cli/', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+end;
+
 procedure InitializeWizard;
 begin
   CodexCliPage := CreateOutputMsgPage(
     wpSelectTasks,
-    'Codex CLI (opcional)',
-    'Instale o Codex CLI para monitorar limites do Codex',
-    'O widget consulta o Codex CLI localmente. Se ele ainda não estiver instalado, abra a documentação oficial para instalá-lo e entrar com a sua conta ChatGPT.'
+    'CLIs opcionais',
+    'Instale as CLIs dos provedores que deseja monitorar',
+    'O widget usa integrações locais e não solicita credenciais. Abra a documentação oficial do Codex CLI ou do Antigravity CLI (AGY) se ainda precisar instalá-los e autenticar sua conta.'
   );
 
   CodexCliLink := TNewStaticText.Create(CodexCliPage);
@@ -81,4 +89,13 @@ begin
   CodexCliLink.Cursor := crHand;
   CodexCliLink.Top := ScaleY(100);
   CodexCliLink.OnClick := @OpenCodexCliDocs;
+
+  AgyCliLink := TNewStaticText.Create(CodexCliPage);
+  AgyCliLink.Parent := CodexCliPage.Surface;
+  AgyCliLink.Caption := 'Abrir documentação de instalação do Antigravity CLI (AGY)';
+  AgyCliLink.Font.Color := clBlue;
+  AgyCliLink.Font.Style := [fsUnderline];
+  AgyCliLink.Cursor := crHand;
+  AgyCliLink.Top := ScaleY(126);
+  AgyCliLink.OnClick := @OpenAgyCliDocs;
 end;
