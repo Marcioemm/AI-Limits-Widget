@@ -1,0 +1,51 @@
+name: Build Ubuntu
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Pacote Ubuntu 24.04 (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências do build
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes dpkg-dev python3-tk xauth xvfb
+          python -m pip install --disable-pip-version-check -r requirements-build.txt
+      - name: Validar versão da tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          project_version="$(python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])")"
+          test "v$project_version" = "$GITHUB_REF_NAME"
+      - name: Gerar pacote Debian
+        run: bash scripts/build-linux.sh
+      - name: Validar pacote e checksum
+        run: |
+          deb_file="$(find build/linux -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb_file"
+          (cd build/linux && sha256sum --check "$(basename "$deb_file").sha256")
+          dpkg-deb --info "$deb_file"
+          extract_dir="$(mktemp -d)"
+          dpkg-deb --extract "$deb_file" "$extract_dir"
+          "$extract_dir/usr/lib/ai-limits-widget/ai-limits-widget" --help
+      - name: Publicar artefatos do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-limits-widget-ubuntu-${{ github.run_id }}
+          path: |
+            build/linux/*.deb
+            build/linux/*.deb.sha256
+          if-no-files-found: error

@@ -1,23 +1,98 @@
 # Como contribuir
 
-Obrigado pelo interesse em melhorar o AI Limits Widget.
+Obrigado pelo interesse em melhorar o AI Limits Widget. Contribuições de
+código, documentação, testes, traduções e relatos bem reproduzíveis são bem-vindas.
 
-## Antes de abrir uma issue
+## Primeiro passo
 
-- Confirme que está usando uma versão recente do projeto.
-- Não publique tokens, arquivos de credenciais ou capturas que contenham dados pessoais.
-- Informe a versão do Windows, Python, Codex CLI ou Claude Code, conforme o provedor afetado.
+Antes de começar uma mudança grande, abra uma issue de ideia ou funcionalidade
+para alinhar o escopo. Para correções pequenas, um pull request direto é bem-vindo.
 
-## Pull requests
+Nunca publique tokens, arquivos de credenciais, caches locais ou capturas com
+dados pessoais. Para vulnerabilidades, siga [SECURITY.md](SECURITY.md).
 
-- Mantenha as mudanças pequenas e focadas.
-- Preserve o funcionamento sem dependências de terceiros sempre que possível.
-- Inclua testes para regras de cálculo, cache ou retentativa quando alterar essas partes.
-- Não adicione arquivos de credenciais, caches locais ou executáveis gerados.
+## Fluxo recomendado
 
-## Escopo
+1. Faça um *fork* do repositório e crie uma branch a partir de `main`.
+2. Faça uma alteração pequena e focada.
+3. Execute a validação local:
 
-Este projeto mostra limites disponibilizados pelas ferramentas instaladas pelo
-usuário. Ele não tenta burlar limites, automatizar contas ou armazenar
+   ```powershell
+   python -m pip install -e ".[dev]"
+   python -m compileall -q .\src .\tests
+   python -m ruff check .\src .\tests
+   python -m ruff format --check .\src .\tests
+   python -m mypy
+   python -m coverage run -m unittest discover -s .\tests -v
+   python -m coverage report
+   ```
+
+   Os testes comuns incluem as regras puras da Ilha Dinâmica e não precisam
+   abrir janelas. Para executar também o smoke gráfico no Windows:
+
+   ```powershell
+   $env:AI_LIMITS_RUN_TK_SMOKE = '1'
+   python -m unittest tests.test_circular_meter -v
+   Remove-Item Env:AI_LIMITS_RUN_TK_SMOKE
+   ```
+
+   O relatório exige cobertura total mínima de 30%. Esse piso inicial deve
+   crescer junto com os testes e não pode ser reduzido para contornar falhas.
+
+4. Faça commits claros e assine-os com o DCO:
+
+   ```powershell
+   git commit -s -m "fix: descreve a correção"
+   ```
+
+5. Abra um pull request para `main`, usando o modelo disponível no GitHub.
+
+Quem tem acesso de escrita também deve trabalhar em branches e abrir pull
+requests; `main` é a linha de código revisada e distribuída.
+
+## Developer Certificate of Origin (DCO)
+
+Ao enviar um pull request, cada commit de autoria própria deve conter uma linha
+`Signed-off-by`. O comando `git commit -s` adiciona essa linha automaticamente.
+Ela certifica que você pode submeter a contribuição sob a licença MIT do
+projeto; leia [DCO.md](DCO.md) para o texto completo.
+
+Caso sua contribuição tenha vários autores, cada autor deve assinar o commit
+correspondente. Não envie código copiado de fontes incompatíveis com a licença
+MIT ou sem permissão clara de reutilização.
+
+## Critérios de revisão
+
+- Mantenha as mudanças pequenas, legíveis e focadas.
+- Preserve o funcionamento sem dependências de terceiros em tempo de execução,
+  quando possível.
+- Inclua ou atualize testes ao mudar regras de cálculo, cache, retentativa ou
+  interpretação das respostas das CLIs.
+- Atualize README, avisos de licença ou notas de distribuição quando necessário.
+- Não inclua executáveis gerados, arquivos de build ou credenciais.
+
+Pull requests podem receber pedidos de ajuste. A aprovação de um pull request
+não transfere sua autoria: a contribuição continua atribuída a quem a enviou e
+é licenciada sob MIT conforme o DCO.
+
+## Proteção da `main` (mantenedor)
+
+Depois de este arquivo chegar à `main`, configure uma regra de proteção ou
+*ruleset* no GitHub para a branch `main` e exija:
+
+- pull request antes do merge;
+- uma aprovação do proprietário de código;
+- os status **Testes (Windows)** e **Testes (Ubuntu)** concluídos com sucesso;
+- conversa resolvida antes do merge.
+
+O arquivo [.github/CODEOWNERS](.github/CODEOWNERS) designa `@Marcioemm` como
+responsável pelo código, e o workflow de testes executa compilação e testes em
+cada pull request.
+
+## Conduta e escopo
+
+Trate as pessoas com respeito e mantenha as discussões técnicas e construtivas.
+O projeto mostra limites disponibilizados pelas ferramentas instaladas pelo
+usuário; ele não tenta burlar limites, automatizar contas ou armazenar
 credenciais.
 
