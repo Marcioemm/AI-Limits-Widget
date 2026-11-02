@@ -8,7 +8,6 @@ import os
 import queue
 import subprocess
 import threading
-import time
 import tkinter as tk
 import webbrowser
 from typing import Any
@@ -34,6 +33,7 @@ except ImportError:  # Execução direta por scripts/start.ps1.
         provider_commands,
     )
 
+from ..collector import Collector
 from .dynamic_island import DynamicIslandMixin
 from .meters import CompactBatteryMeter, HoverTooltip, Meter
 from .settings import SettingsDialog
@@ -67,7 +67,6 @@ class UsageWidget(DynamicIslandMixin):
     def __init__(self) -> None:
         self.clients: dict[str, LimitsProvider] = {}
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
-        self.last_provider_at: dict[str, float] = {}
         self.warnings: dict[str, str | None] = {}
         self.last_windows: dict[str, dict[str, int | None]] = {}
         self.last_meter_data: dict[str, tuple[RateLimitWindow | None, RateLimitWindow | None]] = {}
@@ -118,10 +117,14 @@ class UsageWidget(DynamicIslandMixin):
         self.compact_primary_profile_id = self.config.get("compactPrimaryProfileId")
         self.compact_visible_count = self.config.get("compactVisibleCount", 1)
         self.refresh_seconds = self.config["refreshMinutes"] * 60
-        self.clients = {}
-        for profile in self.profiles:
-            self.clients[profile["id"]] = create_provider(profile)
-        self.last_provider_at = {}
+        self.collector = Collector(
+            self.configured_profiles,
+            self.refresh_seconds,
+            publish=self.config.get("integrationEnabled", False),
+            factory=create_provider,
+            availability=profile_unavailable_reason,
+        )
+        self.clients = self.collector.clients
         self.warnings = {profile["id"]: None for profile in self.profiles}
         self.last_windows = {}
         self.last_meter_data = {}
@@ -147,8 +150,7 @@ class UsageWidget(DynamicIslandMixin):
         return COMPACT_ISLAND_MIN_WIDTH + (self._compact_expanded_count() - 1) * COMPACT_BATTERY_SLOT_WIDTH
 
     def _close_clients(self) -> None:
-        for client in self.clients.values():
-            client.close()
+        self.collector.close()
 
     def _resize_to_content(self) -> None:
         self.root.update_idletasks()
@@ -513,6 +515,10 @@ class UsageWidget(DynamicIslandMixin):
         self._collapse_compact_island(animate=False)
         self._close_clients()
         self._discover_profiles()
+        if not self.config["integrationEnabled"]:
+            from ..config import APP_DATA_DIR
+
+            (APP_DATA_DIR / "integration" / "v1" / "snapshot.json").unlink(missing_ok=True)
         for child in self.body.winfo_children():
             child.destroy()
         self._build_body()
@@ -552,7 +558,7 @@ class UsageWidget(DynamicIslandMixin):
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.15",
+            "versao": "0.1.16",
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [
@@ -580,23 +586,15 @@ class UsageWidget(DynamicIslandMixin):
         threading.Thread(target=self._refresh_worker, args=(force,), daemon=True).start()
 
     def _refresh_worker(self, force: bool) -> None:
-        for profile in self.profiles:
-            profile_id = profile["id"]
-            client = self.clients[profile_id]
-            try:
-                interval = self.refresh_seconds if client.minimum_refresh_interval_seconds else 0
-                if not force and time.monotonic() - self.last_provider_at.get(profile_id, 0.0) < interval:
-                    continue
-                self.events.put(("profile", (profile, client.read_limits())))
-                self.last_provider_at[profile_id] = time.monotonic()
-            except Exception as exc:
-                self.events.put(("profile_error", (profile, str(exc))))
-        self.events.put(("done", None))
+        self.collector.collect(force=force, emit=lambda kind, payload: self.events.put((kind, payload)))
 
     def _drain_events(self) -> None:
         try:
             while True:
                 kind, payload = self.events.get_nowait()
+                # Unavailable profiles remain in the public snapshot but have no card.
+                if kind in {"profile", "profile_error"} and payload[0]["id"] not in self.meters:
+                    continue
                 if kind == "profile":
                     profile, data = payload
                     short, week = self.meters[profile["id"]]

@@ -30,6 +30,8 @@ def default_config() -> AppConfig:
         "compactPrimaryProfileId": None,
         "compactVisibleCount": 1,
         "startWithWindows": False,
+        "integrationEnabled": False,
+        "integrationMode": False,
         "executables": {"codex": None, "claude": None, "gemini": None, "grok": None},
         "profiles": [],
     }
@@ -73,6 +75,8 @@ def normalize_config(value: Any) -> AppConfig:
         config["compactVisibleCount"] = max(1, min(3, int(value.get("compactVisibleCount", 1))))
     except (TypeError, ValueError):
         pass
+    config["integrationEnabled"] = value.get("integrationEnabled") is True
+    config["integrationMode"] = value.get("integrationMode") is True
     start_at_login = value.get("startAtLogin")
     if isinstance(start_at_login, bool):
         config["startWithWindows"] = start_at_login

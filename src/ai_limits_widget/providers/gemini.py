@@ -89,6 +89,7 @@ class GeminiClient:
             raise ProviderError("gemini", "A última cota recebida do AGY é inválida.") from exc
         model_name = str(model.get("displayName") or model.get("id") or "Gemini")
         return {
+            "stale": True,
             "five_hour": None,
             "weekly": {
                 "usedPercent": (1.0 - remaining_fraction) * 100.0,
@@ -195,11 +196,7 @@ def _normalize_summary(payload: dict[str, Any]) -> NormalizedLimits | None:
     if not isinstance(groups, list):
         return None
     group = next(
-        (
-            item
-            for item in groups
-            if isinstance(item, dict) and "gemini" in str(item.get("displayName") or "").lower()
-        ),
+        (item for item in groups if isinstance(item, dict) and "gemini" in str(item.get("displayName") or "").lower()),
         None,
     )
     if not isinstance(group, dict):

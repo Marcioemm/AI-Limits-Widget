@@ -51,6 +51,7 @@ class SettingsDialog(tk.Toplevel):
             provider: tk.StringVar(value=self.config["executables"].get(provider) or "") for provider in PROVIDERS
         }
         self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
+        self.integration_var = tk.BooleanVar(value=self.config.get("integrationEnabled", False))
         self.start_with_windows_var = tk.BooleanVar(value=self.config["startWithWindows"])
         self.primary_profile_var = tk.StringVar()
         self.compact_visible_count_var = tk.IntVar(value=self.config["compactVisibleCount"])
@@ -154,6 +155,17 @@ class SettingsDialog(tk.Toplevel):
         tk.Entry(
             body, textvariable=self.refresh_var, width=8, bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat"
         ).pack(anchor="w", ipady=4)
+
+        tk.Checkbutton(
+            body,
+            text="Disponibilizar limites para outros aplicativos",
+            variable=self.integration_var,
+            bg=BG,
+            fg=TEXT,
+            selectcolor=PANEL_2,
+            activebackground=BG,
+            activeforeground=TEXT,
+        ).pack(anchor="w", pady=(10, 0))
 
         tk.Checkbutton(
             body,
@@ -426,6 +438,8 @@ class SettingsDialog(tk.Toplevel):
                     "executables": executables,
                     "profiles": profiles,
                     "startWithWindows": start_with_windows,
+                    "integrationEnabled": self.integration_var.get(),
+                    "integrationMode": False,
                     "compactPrimaryProfileId": primary_profile_id,
                     "compactVisibleCount": compact_visible_count,
                 }

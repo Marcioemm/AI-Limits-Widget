@@ -122,9 +122,9 @@ def load_profiles() -> list[Profile]:
         executables = config["executables"]
         for provider in config["providers"]:
             if provider == "claude":
-                discovered = discover_claude_profiles(executables.get(provider))
-                if discovered:
-                    profiles.extend(discovered)
+                discovered_profiles = discover_claude_profiles(executables.get(provider))
+                if discovered_profiles:
+                    profiles.extend(discovered_profiles)
                     continue
             profiles.append(
                 {
