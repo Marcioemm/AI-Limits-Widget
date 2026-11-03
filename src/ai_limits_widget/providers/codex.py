@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 from typing import Any, cast
@@ -44,7 +45,7 @@ class CodexClient:
 
         startupinfo = None
         creationflags = 0
-        if os.name == "nt":
+        if sys.platform == "win32":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             creationflags = subprocess.CREATE_NO_WINDOW

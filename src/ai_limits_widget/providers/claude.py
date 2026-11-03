@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -118,7 +119,7 @@ class ClaudeClient:
             return False
         startupinfo = None
         creationflags = 0
-        if os.name == "nt":
+        if sys.platform == "win32":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             creationflags = subprocess.CREATE_NO_WINDOW

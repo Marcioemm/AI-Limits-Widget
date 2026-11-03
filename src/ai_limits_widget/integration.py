@@ -5,8 +5,8 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import math
-import os
 import pathlib
+import sys
 import threading
 import time
 import uuid
@@ -58,7 +58,7 @@ class ProducerLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         stream = self.path.open("a+b")
         try:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
 
                 if self.path.stat().st_size == 0:
@@ -69,7 +69,7 @@ class ProducerLock:
             else:
                 import fcntl
 
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore[attr-defined]
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             stream.close()
             raise ProducerBusy("AI Limits já possui um produtor ativo. Encerre-o antes de trocar de modo.") from exc
