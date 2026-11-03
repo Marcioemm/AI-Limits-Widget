@@ -36,13 +36,15 @@ def remaining(value: Any) -> float | None:
     return None if value is None else max(0, min(100, 100 - float(value)))
 
 
-def run_integration() -> None:
+def run_integration() -> bool:
     import signal
     import threading
 
     from ai_limits_widget.collector import Collector
+    from ai_limits_widget.tray import IntegrationTray
 
     stop = threading.Event()
+    show_widget = threading.Event()
     stop_file = APP_DATA_DIR / "integration.stop"
     stop_file.unlink(missing_ok=True)
     previous = {}
@@ -50,15 +52,21 @@ def run_integration() -> None:
         previous[signum] = signal.signal(signum, lambda *_: stop.set())
     config = load_config()
     collector = Collector(load_profiles(), config["refreshMinutes"] * 60, publish=True)
+    tray = IntegrationTray(stop, show_widget) if os.name == "nt" else None
     try:
+        if tray:
+            tray.start()
         while not stop.is_set() and not stop_file.exists():
             collector.collect()
             stop.wait(1)
     finally:
+        if tray:
+            tray.close()
         collector.close()
         stop_file.unlink(missing_ok=True)
         for signum, handler in previous.items():
             signal.signal(signum, handler)
+    return show_widget.is_set()
 
 
 __all__ = ["executable_filetypes", "main", "print_once", "provider_commands"]
@@ -142,14 +150,22 @@ def main() -> None:
                     if args.integration:
                         config["integrationEnabled"] = True
                     config = save_config(config)
-                if config["integrationMode"]:
-                    run_integration()
-                else:
-                    if not config["integrationEnabled"]:
-                        (APP_DATA_DIR / "integration" / "v1" / "snapshot.json").unlink(missing_ok=True)
-                    from ai_limits_widget.ui.app import UsageWidget
+                while True:
+                    if config["integrationMode"]:
+                        if not run_integration():
+                            break
+                        config["integrationMode"] = False
+                        config = save_config(config)
+                    else:
+                        if not config["integrationEnabled"]:
+                            (APP_DATA_DIR / "integration" / "v1" / "snapshot.json").unlink(missing_ok=True)
+                        from ai_limits_widget.ui.app import UsageWidget
 
-                    UsageWidget().run()
+                        widget = UsageWidget()
+                        widget.run()
+                        if not widget.background_requested:
+                            break
+                    config = load_config()
         except ProducerBusy as exc:
             if sys.stderr is not None:
                 print(str(exc), file=sys.stderr)

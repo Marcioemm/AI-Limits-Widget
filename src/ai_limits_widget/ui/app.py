@@ -65,6 +65,7 @@ GROK_DOCS = "https://docs.x.ai/build/overview"
 
 class UsageWidget(DynamicIslandMixin):
     def __init__(self) -> None:
+        self.background_requested = False
         self.clients: dict[str, LimitsProvider] = {}
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.warnings: dict[str, str | None] = {}
@@ -690,6 +691,10 @@ class UsageWidget(DynamicIslandMixin):
             self._render_compact_detail(profile)
         if week:
             week.set_error(f"{profile['label']} indisponível")
+
+    def enter_background(self) -> None:
+        self.background_requested = True
+        self.close()
 
     def close(self) -> None:
         self._collapse_compact_island(animate=False)

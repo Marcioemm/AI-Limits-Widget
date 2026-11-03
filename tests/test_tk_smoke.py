@@ -12,6 +12,42 @@ RUN_TK_SMOKE = os.environ.get("AI_LIMITS_RUN_TK_SMOKE") == "1"
 
 @unittest.skipUnless(RUN_TK_SMOKE, "smoke gráfico executado separadamente com Xvfb")
 class TkSmokeTests(unittest.TestCase):
+    def test_settings_enable_background_and_close_widget_after_saving(self):
+        from ai_limits_widget import collector
+        from ai_limits_widget.ui import app as ui_app
+        from ai_limits_widget.ui import settings as settings_ui
+
+        with tempfile.TemporaryDirectory() as directory:
+            data = pathlib.Path(directory)
+            config_file = data / "config.json"
+            config.save_config({"providers": ["codex"], "executables": {"grok": None}}, config_file)
+            with (
+                patch.object(config, "CONFIG_FILE", config_file),
+                patch.object(collector, "APP_DATA_DIR", data),
+                patch.object(ui_app, "load_profiles", return_value=[]),
+                patch.object(settings_ui, "set_start_at_login") as startup,
+                patch.object(settings_ui, "remove_statusline"),
+            ):
+                widget = ui_app.UsageWidget()
+                try:
+                    settings = app.SettingsDialog(widget)
+                    settings.background_var.set(True)
+                    settings.integration_var.set(False)
+                    with patch.object(widget, "rescan_integrations") as rescan:
+                        settings._save()
+                        saved = config.load_config()
+                        self.assertTrue(saved["integrationMode"])
+                        self.assertTrue(saved["integrationEnabled"])
+                        startup.assert_called_once_with(False)
+                        rescan.assert_not_called()
+                    # The transition is deferred until the settings grab is released.
+                    self.assertFalse(widget.background_requested)
+                    widget.root.update_idletasks()
+                    self.assertTrue(widget.background_requested)
+                finally:
+                    if not widget.background_requested:
+                        widget.close()
+
     def test_widget_publishes_the_same_collection_without_duplicate_queries(self):
         from ai_limits_widget import collector
         from ai_limits_widget.ui import app as ui_app

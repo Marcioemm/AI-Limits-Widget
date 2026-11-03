@@ -9,6 +9,9 @@ publicação. As versões seguem o formato `MAIOR.MENOR.CORREÇÃO`.
 
 ### Adicionado
 
+- Opção **Funcionar em segundo plano** nas configurações do Windows, com
+  publicação automática do JSON e ícone na bandeja para abrir o widget ou sair.
+
 - Snapshot público JSON v1, coletor compartilhado e modo `--integration` sem
   janela, com heartbeat e produtor único por diretório de dados.
 

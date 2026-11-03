@@ -12,7 +12,16 @@ No widget, marque **Disponibilizar limites para outros aplicativos** nas
 configurações. A coleta que atualiza os cartões publica também o snapshot.
 A preferência é inicialmente desativada.
 
-Para usar sem janela:
+No Windows, marque também **Funcionar em segundo plano** e salve. O widget
+fecha e o mesmo aplicativo passa a executar o modo `--integration`, mantendo
+o JSON atualizado. A publicação é ativada automaticamente. O ícone **AI Limits**
+aparece na bandeja do sistema (pode ficar entre os ícones ocultos do Windows).
+Clique com o botão direito para **Abrir widget** ou **Sair**; um duplo clique
+também abre o widget. Abrir o widget desativa a preferência de segundo plano;
+sair preserva o modo escolhido para a próxima abertura. A opção de iniciar com
+o Windows é independente e respeita o modo salvo.
+
+Para usar sem janela pela linha de comando:
 
 ```powershell
 ai-limits-widget --integration
@@ -32,8 +41,9 @@ instalador: `scripts/build-installer.ps1`. O diretório gerado é
 `--integration` salva `integrationMode: true` e `integrationEnabled: true`;
 `--widget` salva `integrationMode: false`. A entrada já existente de login inicia
 o mesmo programa, que lê o modo salvo. O comando não habilita login automático
-por conta própria. O headless carrega a configuração na inicialização: para
-alterar perfis/intervalo, encerre, use o widget e reinicie o modo desejado.
+por conta própria. No Windows, o modo sem janela também mostra o ícone na
+bandeja. Para alterar perfis/intervalo, abra o widget pelo ícone e salve as
+configurações. No Linux, o modo sem janela continua sem bandeja.
 
 Há um lock do sistema por diretório de dados, inclusive no widget sem exportação.
 O segundo produtor informa que há uma instância ativa e termina com código 2;

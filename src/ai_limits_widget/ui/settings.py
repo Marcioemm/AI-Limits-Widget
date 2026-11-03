@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
 import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
@@ -30,6 +31,8 @@ class SettingsHost(Protocol):
 
     def rescan_integrations(self) -> None: ...
 
+    def enter_background(self) -> None: ...
+
 
 class SettingsDialog(tk.Toplevel):
     """Configuração local. Nunca lê ou grava tokens, apenas caminhos e perfis."""
@@ -52,6 +55,7 @@ class SettingsDialog(tk.Toplevel):
         }
         self.refresh_var = tk.StringVar(value=str(self.config["refreshMinutes"]))
         self.integration_var = tk.BooleanVar(value=self.config.get("integrationEnabled", False))
+        self.background_var = tk.BooleanVar(value=self.config.get("integrationMode", False))
         self.start_with_windows_var = tk.BooleanVar(value=self.config["startWithWindows"])
         self.primary_profile_var = tk.StringVar()
         self.compact_visible_count_var = tk.IntVar(value=self.config["compactVisibleCount"])
@@ -167,9 +171,30 @@ class SettingsDialog(tk.Toplevel):
             activeforeground=TEXT,
         ).pack(anchor="w", pady=(10, 0))
 
+        if os.name == "nt":
+            tk.Checkbutton(
+                body,
+                text="Funcionar em segundo plano",
+                variable=self.background_var,
+                bg=BG,
+                fg=TEXT,
+                selectcolor=PANEL_2,
+                activebackground=BG,
+                activeforeground=TEXT,
+            ).pack(anchor="w", pady=(10, 0))
+            tk.Label(
+                body,
+                text="Mantém o JSON atualizado sem janela. Use o ícone na bandeja para abrir o widget ou sair.",
+                bg=BG,
+                fg=MUTED,
+                wraplength=480,
+                justify="left",
+                font=("Segoe UI", 8),
+            ).pack(anchor="w")
+
         tk.Checkbutton(
             body,
-            text="Abrir o widget automaticamente ao iniciar o Windows",
+            text="Iniciar o aplicativo automaticamente com o Windows",
             variable=self.start_with_windows_var,
             bg=BG,
             fg=TEXT,
@@ -438,8 +463,8 @@ class SettingsDialog(tk.Toplevel):
                     "executables": executables,
                     "profiles": profiles,
                     "startWithWindows": start_with_windows,
-                    "integrationEnabled": self.integration_var.get(),
-                    "integrationMode": False,
+                    "integrationEnabled": self.integration_var.get() or self.background_var.get(),
+                    "integrationMode": self.background_var.get(),
                     "compactPrimaryProfileId": primary_profile_id,
                     "compactVisibleCount": compact_visible_count,
                 }
@@ -455,5 +480,8 @@ class SettingsDialog(tk.Toplevel):
             return
         if remove_agy_after_save:
             remove_statusline()
-        self.widget.rescan_integrations()
+        if self.background_var.get():
+            self.widget.root.after_idle(self.widget.enter_background)
+        else:
+            self.widget.rescan_integrations()
         self.destroy()
