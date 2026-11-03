@@ -33,6 +33,7 @@ except ImportError:  # Execução direta por scripts/start.ps1.
         provider_commands,
     )
 
+from .. import __version__
 from ..collector import Collector
 from .dynamic_island import DynamicIslandMixin
 from .meters import CompactBatteryMeter, HoverTooltip, Meter
@@ -559,7 +560,7 @@ class UsageWidget(DynamicIslandMixin):
             cli[provider] = info
         report = {
             "aplicativo": "AI Limits Widget",
-            "versao": "0.1.16",
+            "versao": __version__,
             "atualizacaoMinutos": self.config["refreshMinutes"],
             "cli": cli,
             "perfis": [

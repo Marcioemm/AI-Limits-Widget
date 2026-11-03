@@ -1,4 +1,4 @@
-# Integração local v1 — AI Limits Widget 0.1.16
+# Integração local v1 — AI Limits Widget 1.1.16
 
 O AI Limits coleta os limites das contas locais e publica um snapshot público
 somente de leitura. Vários aplicativos podem ler o mesmo arquivo sem novas

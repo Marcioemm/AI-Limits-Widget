@@ -7,6 +7,10 @@ publicação. As versões seguem o formato `MAIOR.MENOR.CORREÇÃO`.
 
 ## Não lançado
 
+Sem alterações pendentes.
+
+## 1.1.16 — 2026-11-03
+
 ### Adicionado
 
 - Opção **Funcionar em segundo plano** nas configurações do Windows, com
@@ -41,6 +45,5 @@ publicação. As versões seguem o formato `MAIOR.MENOR.CORREÇÃO`.
 
 ## Base atual
 
-O código declara a versão `0.1.15`. Este histórico começa com o estado atual do
-projeto; não foram reconstruídas notas de releases anteriores. As entradas acima
-serão associadas a uma versão quando a próxima release for preparada.
+Este histórico começou a partir da versão `0.1.15`; não foram reconstruídas
+notas de releases anteriores.
