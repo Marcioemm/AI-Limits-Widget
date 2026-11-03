@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "producer": {
+    "name": "ai-limits-widget",
+    "version": "0.1.16"
+  },
+  "instanceId": "20000000-0000-4000-8000-000000000001",
+  "revision": 12,
+  "publishedAt": "2026-11-02T18:00:00Z",
+  "heartbeatAt": "2026-11-02T18:00:00Z",
+  "heartbeatIntervalSeconds": 15,
+  "profiles": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "provider": "claude",
+      "label": "Claude pessoal",
+      "status": "ok",
+      "lastAttemptAt": "2026-11-02T18:00:00Z",
+      "lastSuccessAt": "2026-11-02T18:00:00Z",
+      "nextAttemptAt": "2026-11-02T18:05:00Z",
+      "error": null,
+      "windows": [
+        {
+          "id": "five_hour",
+          "label": "Janela curta",
+          "durationMinutes": 300,
+          "remainingPercent": 72,
+          "observedAt": "2026-11-02T18:00:00Z",
+          "validUntil": "2026-11-02T18:10:00Z",
+          "resetsAt": "2026-11-02T21:00:00Z"
+        },
+        {
+          "id": "weekly",
+          "label": "Janela semanal",
+          "durationMinutes": 10080,
+          "remainingPercent": 44.5,
+          "observedAt": "2026-11-02T18:00:00Z",
+          "validUntil": "2026-11-02T18:10:00Z",
+          "resetsAt": "2026-11-03T18:00:00Z"
+        }
+      ]
+    }
+  ]
+}

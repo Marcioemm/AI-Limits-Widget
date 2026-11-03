@@ -23,6 +23,8 @@ class AppConfig(TypedDict):
     layout: LayoutName
     compactPrimaryProfileId: str | None
     compactVisibleCount: int
+    integrationEnabled: bool
+    integrationMode: bool
     startWithWindows: bool
     executables: dict[ProviderName, str | None]
     profiles: list[Profile]

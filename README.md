@@ -261,3 +261,9 @@ conforme o [DCO](DCO.md).
 Copyright © 2026 Marcio Emmanuel. Distribuído sob a [licença MIT](LICENSE).
 Consulte também os [avisos de componentes de terceiros](THIRD_PARTY_NOTICES.md).
 
+
+## Integração local com outros aplicativos
+
+A versão 0.1.16 oferece snapshot JSON v1 e modo sem janela: `ai-limits-widget --integration`.
+No widget, ative “Disponibilizar limites para outros aplicativos” nas configurações.
+Veja [o contrato, comandos e fixtures](docs/integration.md).

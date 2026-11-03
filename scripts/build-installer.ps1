@@ -101,6 +101,11 @@ try {
     throw "O executável empacotado falhou no teste de inicialização (código $($smokeTest.ExitCode))."
   }
 
+  & $pythonExe (Join-Path $projectRoot 'scripts\test-integration-package.py') $executable
+  if ($LASTEXITCODE -ne 0) {
+    throw 'O executável empacotado falhou no teste do modo integração.'
+  }
+
   & $iscc "/DMyAppVersion=$Version" "/DSourceDir=$appPath" (Join-Path $projectRoot 'installer\AI Limits Widget.iss')
   if ($LASTEXITCODE -ne 0) {
     throw 'A compilação do instalador com Inno Setup falhou.'

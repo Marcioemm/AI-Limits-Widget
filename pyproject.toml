@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-limits-widget"
-version = "0.1.15"
+version = "0.1.16"
 description = "Widget local para acompanhar limites de uso do Codex, Claude Code e Gemini."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,6 +49,8 @@ python_version = "3.10"
 files = [
   "src/ai_limits_widget/compact_layout.py",
   "src/ai_limits_widget/config.py",
+  "src/ai_limits_widget/collector.py",
+  "src/ai_limits_widget/integration.py",
   "src/ai_limits_widget/models.py",
   "src/ai_limits_widget/profiles.py",
   "src/ai_limits_widget/providers",

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "producer": {
+    "name": "ai-limits-widget",
+    "version": "0.1.16"
+  },
+  "instanceId": "20000000-0000-4000-8000-000000000001",
+  "revision": 12,
+  "publishedAt": "2026-11-02T18:00:00Z",
+  "heartbeatAt": "2026-11-02T18:00:00Z",
+  "heartbeatIntervalSeconds": 15,
+  "profiles": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "provider": "claude",
+      "label": "Claude pessoal",
+      "status": "auth_required",
+      "lastAttemptAt": "2026-11-02T18:00:00Z",
+      "lastSuccessAt": null,
+      "nextAttemptAt": "2026-11-02T18:05:00Z",
+      "error": {
+        "code": "auth_required",
+        "message": "Autentique novamente o provedor"
+      },
+      "windows": []
+    }
+  ]
+}
