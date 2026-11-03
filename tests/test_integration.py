@@ -267,8 +267,17 @@ class TransportTests(unittest.TestCase):
                 process.kill()
                 process.wait(timeout=10)
                 process.stdout.close()
-            with ProducerLock(pathlib.Path(directory)):
-                pass
+            # Windows may finish kernel file cleanup just after the process exits.
+            # Still require release promptly, without making scheduler timing a failure.
+            deadline = time.monotonic() + 3
+            while True:
+                try:
+                    with ProducerLock(pathlib.Path(directory)):
+                        break
+                except ProducerBusy:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.02)
 
     def test_headless_entry_point_never_imports_ui_and_stops_cleanly(self):
         with tempfile.TemporaryDirectory() as directory:

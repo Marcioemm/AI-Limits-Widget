@@ -38,6 +38,9 @@ Sem alterações pendentes.
 
 ### Corrigido
 
+- A checagem de tipos distingue chamadas exclusivas do Windows para validar
+  corretamente o coletor e os provedores também no Ubuntu.
+
 - A descoberta de contas do Claude preserva perfis manuais e evita duplicar
   diretórios já configurados.
 - O processo de geração do instalador Windows verifica a inicialização do
